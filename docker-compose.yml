@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # The Database
+  mongodb:
+    image: mongo:latest
+    container_name: devsync-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  # Your Next.js App
+  app:
+    build: .
+    container_name: devsync-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/devsync
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo-data:
