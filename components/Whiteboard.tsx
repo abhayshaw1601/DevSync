@@ -1,9 +1,7 @@
-import { resizePerfectLineForNWHandler } from "@excalidraw/excalidraw/element/sizeHelpers";
-
 export default function Whiteboard() {
     return (
-        <div>
-            <h1>Whiteboard</h1>
+        <div className="h-full w-full bg-white flex items-center justify-center text-gray-400">
+            Whiteboard Canvas Coming Day 4...
         </div>
     );
 }
