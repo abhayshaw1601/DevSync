@@ -13,4 +13,4 @@ COPY . .
 EXPOSE 3000
 
 # Run in development mode
-CMD ["npm", "run dev"]
+CMD ["npm", "run", "dev"]
