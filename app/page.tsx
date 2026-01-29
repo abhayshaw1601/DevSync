@@ -20,6 +20,21 @@ export default function Home() {
     { id: 'default', name: 'index.js', type: 'file', content: '// Welcome to DevSync\n// Start coding...' }
   ]);
   const [activeFileId, setActiveFileId] = useState('default');
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  // Check auth
+  useState(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) setUser(data.user);
+      });
+  });
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  };
 
   const handleFileContentChange = useCallback((fileId: string, content: string) => {
     setFiles(prev => prev.map(f =>
@@ -116,10 +131,26 @@ export default function Home() {
             Local Mode
           </span>
         </h1>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          {user ? (
+            <>
+              <span className="text-sm text-zinc-400">Hi, {user.name}</span>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-red-400 hover:text-red-300 transition"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <a href="/login" className="text-sm text-zinc-400 hover:text-white transition">Login</a>
+              <a href="/signup" className="text-sm text-zinc-400 hover:text-white transition">Sign Up</a>
+            </>
+          )}
           <a
             href={`/Room/${Date.now()}`}
-            className="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-md text-sm font-medium text-white transition"
+            className="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-md text-sm font-medium text-white transition ml-2"
           >
             Create Room
           </a>

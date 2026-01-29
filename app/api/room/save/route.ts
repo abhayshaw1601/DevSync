@@ -15,6 +15,14 @@ interface FileSystemItem {
 export async function POST(req: Request) {
     try {
         const mongoose = await dbConnect();
+
+        // Auth check
+        const { getSession } = await import('@/lib/auth');
+        const session = await getSession();
+        if (!session) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         console.log(`Connected to DB: ${mongoose.connection.name} on host: ${mongoose.connection.host}`);
         const body = await req.json();
         const { roomId, files, fileId, content, elements } = body;
