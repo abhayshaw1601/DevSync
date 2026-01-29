@@ -49,45 +49,45 @@ export default function Navbar() {
             initial={{ y: -100 }}
             animate={{ y: 0 }}
             transition={{ type: "spring", stiffness: 100, damping: 20 }}
-            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-slate-950/80 backdrop-blur-md border-b border-slate-800 py-3" : "bg-transparent py-5"
+            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/80 backdrop-blur-md border-b border-white/10 py-3" : "bg-transparent py-5"
                 }`}
         >
             <div className="container mx-auto px-6 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-2 group">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-blue-500/25 transition-shadow">
+                    <div className="w-8 h-8 rounded bg-white flex items-center justify-center text-black font-bold text-lg transition-transform group-hover:scale-105">
                         D
                     </div>
                     <span className="text-xl font-bold text-white tracking-tight">
-                        Dev<span className="text-blue-400">Sync</span>
+                        DevSync
                     </span>
                 </Link>
 
                 <div className="flex items-center gap-6">
-                    <Link href="/demo" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                    <Link href="/demo" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
                         Demo
                     </Link>
-                    <Link href="/about" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                    <Link href="/about" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
                         About
                     </Link>
 
-                    <div className="w-px h-5 bg-slate-800" />
+                    <div className="w-px h-5 bg-neutral-800" />
 
                     {loading ? (
-                        <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+                        <Loader2 className="w-5 h-5 text-neutral-500 animate-spin" />
                     ) : user ? (
                         <div className="flex items-center gap-4">
-                            <span className="text-sm text-slate-300 hidden md:block">
+                            <span className="text-sm text-neutral-300 hidden md:block">
                                 Hi, {user.name.split(' ')[0]}
                             </span>
                             <button
                                 onClick={handleLogout}
-                                className="text-sm font-medium text-red-400 hover:text-red-300 transition-colors"
+                                className="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
                             >
                                 Logout
                             </button>
                             <Link
                                 href={`/Room/${roomId}`}
-                                className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg shadow-blue-900/20 hover:shadow-blue-600/30 transition-all transform hover:-translate-y-0.5"
+                                className="bg-white hover:bg-neutral-100 text-black text-sm font-medium px-4 py-2 rounded transition-all"
                             >
                                 New Room
                             </Link>
@@ -96,13 +96,13 @@ export default function Navbar() {
                         <div className="flex items-center gap-4">
                             <Link
                                 href="/login"
-                                className="text-sm font-medium text-white hover:text-blue-400 transition-colors"
+                                className="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
                             >
                                 Login
                             </Link>
                             <Link
                                 href="/signup"
-                                className="bg-white text-slate-900 text-sm font-medium px-4 py-2 rounded-full hover:bg-blue-50 transition-colors shadow-lg shadow-white/10"
+                                className="bg-white text-black text-sm font-medium px-4 py-2 rounded hover:bg-neutral-100 transition-colors"
                             >
                                 Sign Up
                             </Link>

@@ -41,13 +41,14 @@ interface CanvasProps {
 
 export default function Canvas({ roomId }: CanvasProps) {
     const [tool, setTool] = useState<Tool>("pencil");
-    const [color, setColor] = useState("#3b82f6");
+    const [color, setColor] = useState("#ffffff");
     const [strokeWidth, setStrokeWidth] = useState(3);
     const [showGrid, setShowGrid] = useState(false);
     const [elements, setElements] = useState<DrawElement[]>([]);
     const [isDrawing, setIsDrawing] = useState(false);
     const [currentElement, setCurrentElement] = useState<DrawElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isErasing, setIsErasing] = useState(false);
 
     // Pan/zoom state
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 3000, height: 3000 });
@@ -89,7 +90,12 @@ export default function Canvas({ roomId }: CanvasProps) {
             return;
         }
 
-        if (tool === "eraser") return;
+        // Handle eraser - start erasing mode
+        if (tool === "eraser") {
+            setIsErasing(true);
+            return;
+        }
+
         const pos = getMousePos(e);
         const newElement: DrawElement = {
             id: Date.now().toString(),
@@ -116,6 +122,36 @@ export default function Canvas({ roomId }: CanvasProps) {
             return;
         }
 
+        // Handle eraser dragging - check for elements under cursor
+        if (isErasing && tool === "eraser") {
+            const pos = getMousePos(e);
+            const eraserRadius = 20; // Eraser size
+            
+            setElements(prev => {
+                const newElements = prev.filter(el => {
+                    // Check if any point of the element is within eraser radius
+                    return !el.points.some(point => {
+                        const distance = Math.sqrt(
+                            Math.pow(point.x - pos.x, 2) + Math.pow(point.y - pos.y, 2)
+                        );
+                        return distance < eraserRadius;
+                    });
+                });
+                
+                // Only sync if something was erased
+                if (newElements.length !== prev.length && roomId && !isRemoteUpdate.current) {
+                    fetch("/api/room/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ roomId, elements: newElements }),
+                    }).catch(console.error);
+                }
+                
+                return newElements;
+            });
+            return;
+        }
+
         if (!isDrawing || !currentElement) return;
         const pos = getMousePos(e);
         if (tool === "pencil" || tool === "curve") {
@@ -123,12 +159,18 @@ export default function Canvas({ roomId }: CanvasProps) {
         } else {
             setCurrentElement({ ...currentElement, points: [currentElement.points[0], pos] });
         }
-    }, [isDrawing, currentElement, tool, getMousePos, isPanning, panStart, viewBox]);
+    }, [isDrawing, currentElement, tool, getMousePos, isPanning, panStart, viewBox, isErasing, roomId]);
 
     const handleMouseUp = useCallback(() => {
         // Stop panning
         if (isPanning) {
             setIsPanning(false);
+            return;
+        }
+
+        // Stop erasing
+        if (isErasing) {
+            setIsErasing(false);
             return;
         }
 
@@ -150,7 +192,7 @@ export default function Canvas({ roomId }: CanvasProps) {
         }
         setCurrentElement(null);
         setIsDrawing(false);
-    }, [currentElement, roomId, isPanning]);
+    }, [currentElement, roomId, isPanning, isErasing]);
 
     const handleElementClick = useCallback((id: string, e: React.MouseEvent) => {
         if (tool === "eraser") {
@@ -282,9 +324,9 @@ export default function Canvas({ roomId }: CanvasProps) {
     // }, [elements, roomId, handleSave]);
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-900 relative">
+        <div className="h-full w-full flex flex-col bg-black relative">
             {/* Floating Toolbar */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-4 p-2 pl-4 rounded-full bg-slate-800/80 backdrop-blur-md border border-slate-700 shadow-xl z-20">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 px-3 rounded-lg bg-neutral-900 border border-neutral-800 shadow-2xl z-20">
 
                 {/* Tools Group */}
                 <div className="flex gap-1">
@@ -292,9 +334,9 @@ export default function Canvas({ roomId }: CanvasProps) {
                         <button
                             key={t.id}
                             onClick={() => setTool(t.id)}
-                            className={`p-2.5 rounded-full transition-all duration-200 ${tool === t.id
-                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40 transform scale-105"
-                                : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                            className={`p-2 rounded transition-all duration-150 ${tool === t.id
+                                ? "bg-white text-black"
+                                : "text-neutral-400 hover:text-white hover:bg-neutral-800"
                                 }`}
                             title={t.label}
                         >
@@ -303,13 +345,13 @@ export default function Canvas({ roomId }: CanvasProps) {
                     ))}
                 </div>
 
-                <div className="w-px h-6 bg-slate-700" />
+                <div className="w-px h-6 bg-neutral-800" />
 
                 {/* Settings Group */}
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowGrid(!showGrid)}
-                        className={`p-2.5 rounded-full transition-all ${showGrid ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+                        className={`p-2 rounded transition-all ${showGrid ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-white hover:bg-neutral-800"}`}
                         title="Toggle Grid"
                     >
                         <Grid3X3 size={18} />
@@ -317,7 +359,7 @@ export default function Canvas({ roomId }: CanvasProps) {
 
                     <div className="relative group">
                         <div
-                            className="w-6 h-6 rounded-full border border-slate-600 cursor-pointer shadow-inner"
+                            className="w-6 h-6 rounded border border-neutral-700 cursor-pointer"
                             style={{ backgroundColor: color }}
                         />
                         <input
@@ -335,27 +377,27 @@ export default function Canvas({ roomId }: CanvasProps) {
                             max="20"
                             value={strokeWidth}
                             onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                            className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                            className="w-full h-1 bg-neutral-800 rounded appearance-none cursor-pointer accent-white"
                         />
                     </div>
                 </div>
 
-                <div className="w-px h-6 bg-slate-700" />
+                <div className="w-px h-6 bg-neutral-800" />
 
                 {/* Actions */}
-                <div className="flex gap-2 pr-2">
-                    <button onClick={handleResetView} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-full transition-colors" title="Reset View">
+                <div className="flex gap-1">
+                    <button onClick={handleResetView} className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors" title="Reset View">
                         <Maximize size={18} />
                     </button>
-                    <button onClick={handleClear} className="p-2.5 text-red-400 hover:bg-slate-700/50 rounded-full transition-colors" title="Clear Canvas">
+                    <button onClick={handleClear} className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors" title="Clear Canvas">
                         <Trash2 size={18} />
                     </button>
-                    <button onClick={handleExport} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-full transition-colors" title="Export SVG">
+                    <button onClick={handleExport} className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors" title="Export SVG">
                         <Download size={18} />
                     </button>
                     {roomId && (
-                        <div className={`text-xs font-medium px-3 py-1.5 rounded-full ${isSaving ? 'bg-yellow-500/20 text-yellow-500' : 'bg-green-500/20 text-green-500'}`}>
-                            {isSaving ? "Saving..." : "Saved"}
+                        <div className={`text-xs font-medium px-3 py-1.5 rounded ${isSaving ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-800 text-white'}`}>
+                            {isSaving ? "Saving" : "Saved"}
                         </div>
                     )}
                 </div>
@@ -363,12 +405,12 @@ export default function Canvas({ roomId }: CanvasProps) {
 
             <div
                 ref={containerRef}
-                className="flex-1 overflow-hidden bg-[#0f172a] relative"
-                style={{ cursor: isPanning ? 'grabbing' : (tool === 'eraser' ? 'pointer' : 'crosshair') }}
+                className="flex-1 overflow-hidden bg-black relative"
+                style={{ cursor: isPanning ? 'grabbing' : (tool === 'eraser' ? 'crosshair' : 'crosshair') }}
             >
                 {/* Helper text */}
-                <div className="absolute bottom-4 left-4 text-xs text-slate-500 bg-slate-800/50 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 z-10">
-                    <p>Hold <span className="text-slate-300 font-semibold">Shift</span> + drag to pan • Canvas: 3000x3000px</p>
+                <div className="absolute bottom-4 left-4 text-xs text-neutral-500 bg-neutral-900 px-3 py-2 rounded border border-neutral-800 z-10">
+                    <p>Hold <span className="text-white font-medium">Shift</span> + drag to pan | Canvas: 3000x3000px</p>
                 </div>
 
                 <svg
@@ -382,8 +424,8 @@ export default function Canvas({ roomId }: CanvasProps) {
                     onMouseLeave={handleMouseUp}
                     style={{
                         background: showGrid
-                            ? "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"%3E%3Crect width=\"20\" height=\"20\" fill=\"%230f172a\"/%3E%3Ccircle cx=\"1\" cy=\"1\" r=\"1\" fill=\"%231e293b\"/%3E%3C/svg%3E')"
-                            : "#0f172a"
+                            ? "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"%3E%3Crect width=\"20\" height=\"20\" fill=\"%23000000\"/%3E%3Ccircle cx=\"1\" cy=\"1\" r=\"1\" fill=\"%23262626\"/%3E%3C/svg%3E')"
+                            : "#000000"
                     }}
                 >
                     {elements.map(renderElement)}

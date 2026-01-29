@@ -191,47 +191,47 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     };
 
     return (
-        <main className="flex flex-col h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans">
+        <main className="flex flex-col h-screen w-full bg-black text-white overflow-hidden font-sans">
             {/* Header */}
-            <nav className="h-14 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-900/50 backdrop-blur-md z-10">
+            <nav className="h-14 border-b border-neutral-800 flex items-center justify-between px-4 bg-neutral-900 z-10">
                 <div className="flex items-center gap-4">
-                    <Link href="/" className="text-slate-400 hover:text-white transition-colors">
+                    <Link href="/" className="text-neutral-400 hover:text-white transition-colors">
                         <ArrowLeft size={20} />
                     </Link>
-                    <div className="h-6 w-px bg-slate-800" />
+                    <div className="h-6 w-px bg-neutral-800" />
                     <div className="flex items-center gap-2">
                         <span className="font-semibold text-white tracking-tight">Room</span>
-                        <span className="text-xs font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">{roomId}</span>
+                        <span className="text-xs font-mono text-neutral-500 bg-neutral-800 px-2 py-0.5 rounded">{roomId}</span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowUsers(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600/10 text-indigo-400 border border-indigo-600/20 hover:bg-indigo-600/20 transition-all"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium bg-neutral-800 text-white border border-neutral-700 hover:bg-neutral-700 transition-all"
                         title="View Connected Users"
                     >
                         <Users size={16} />
                         <span>{connectedUsers.length}</span>
                     </button>
 
-                    <div className="h-4 w-px bg-slate-800" />
+                    <div className="h-4 w-px bg-neutral-800" />
 
                     <button
                         onClick={() => setShowSidebar(!showSidebar)}
-                        className={`p-2 rounded-md transition-colors ${!showSidebar ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-white'}`}
+                        className={`p-2 rounded transition-colors ${!showSidebar ? 'text-white bg-neutral-800' : 'text-neutral-400 hover:text-white'}`}
                         title="Toggle Sidebar"
                     >
                         {showSidebar ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
                     </button>
 
-                    <div className="h-4 w-px bg-slate-800" />
+                    <div className="h-4 w-px bg-neutral-800" />
 
                     <button
                         onClick={() => { setShowWhiteboard(!showWhiteboard); if (showWhiteboard) setExpandedCanvas(false); }}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${showWhiteboard
-                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
-                                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${showWhiteboard
+                                ? "bg-white text-black"
+                                : "bg-neutral-800 text-white hover:bg-neutral-700"
                             }`}
                     >
                         {showWhiteboard ? <Code2 size={16} /> : <PenTool size={16} />}
@@ -241,7 +241,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     {showWhiteboard && (
                         <button
                             onClick={() => setExpandedCanvas(!expandedCanvas)}
-                            className="p-2 text-slate-400 hover:text-white transition-colors"
+                            className="p-2 text-neutral-400 hover:text-white transition-colors"
                             title={expandedCanvas ? "Minimize" : "Maximize"}
                         >
                             {expandedCanvas ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -250,7 +250,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
                     <button
                         onClick={handleShareLink}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600/10 text-green-400 border border-green-600/20 hover:bg-green-600/20 transition-all"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium bg-neutral-800 text-white border border-neutral-700 hover:bg-neutral-700 transition-all"
                     >
                         {copied ? <Check size={16} /> : <Share2 size={16} />}
                         {copied ? "Copied" : "Share"}
@@ -269,7 +269,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                                 animate={{ width: 250, opacity: 1 }}
                                 exit={{ width: 0, opacity: 0 }}
                                 transition={{ duration: 0.3, ease: "easeInOut" }}
-                                className="border-r border-slate-800 bg-slate-900 overflow-hidden flex-shrink-0"
+                                className="border-r border-neutral-800 bg-neutral-900 overflow-hidden flex-shrink-0"
                             >
                                 <FileExplorer
                                     files={files}
@@ -285,7 +285,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         )}
                     </AnimatePresence>
 
-                    <div className="flex-1 bg-slate-950 relative">
+                    <div className="flex-1 bg-black relative">
                         <Editor
                             roomId={roomId}
                             files={files}
@@ -303,7 +303,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                             animate={{ x: 0, opacity: 1 }}
                             exit={{ x: "100%", opacity: 0 }}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            className={`absolute right-0 top-0 bottom-0 bg-slate-900 z-20 border-l border-slate-800 ${expandedCanvas ? 'w-full' : 'w-1/2 shadow-2xl'}`}
+                            className={`absolute right-0 top-0 bottom-0 bg-black z-20 border-l border-neutral-800 ${expandedCanvas ? 'w-full' : 'w-1/2 shadow-2xl'}`}
                         >
                             <Canvas roomId={roomId} />
                         </motion.div>
@@ -318,7 +318,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
                         onClick={() => setShowUsers(false)}
                     >
                         <motion.div
@@ -326,23 +326,23 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
                             transition={{ type: "spring", duration: 0.3 }}
-                            className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
+                            className="bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="p-6 border-b border-slate-800">
+                            <div className="p-6 border-b border-neutral-800">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-indigo-500/10 rounded-lg">
-                                            <Users size={20} className="text-indigo-400" />
+                                        <div className="p-2 bg-neutral-800 rounded">
+                                            <Users size={20} className="text-white" />
                                         </div>
                                         <div>
                                             <h2 className="text-lg font-semibold text-white">Connected Users</h2>
-                                            <p className="text-sm text-slate-400">{connectedUsers.length} {connectedUsers.length === 1 ? 'user' : 'users'} online</p>
+                                            <p className="text-sm text-neutral-400">{connectedUsers.length} {connectedUsers.length === 1 ? 'user' : 'users'} online</p>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => setShowUsers(false)}
-                                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                                        className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
                                     >
                                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                             <path d="M15 5L5 15M5 5l10 10" />
@@ -354,10 +354,10 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                             <div className="p-4 overflow-y-auto max-h-[60vh]">
                                 {connectedUsers.length === 0 ? (
                                     <div className="text-center py-12">
-                                        <div className="inline-flex p-4 bg-slate-800/50 rounded-full mb-4">
-                                            <Users size={32} className="text-slate-600" />
+                                        <div className="inline-flex p-4 bg-neutral-800 rounded-full mb-4">
+                                            <Users size={32} className="text-neutral-600" />
                                         </div>
-                                        <p className="text-slate-400 text-sm">No users connected yet</p>
+                                        <p className="text-neutral-400 text-sm">No users connected yet</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
@@ -367,18 +367,18 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                                                 initial={{ opacity: 0, x: -20 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 transition={{ delay: index * 0.05 }}
-                                                className="flex items-center gap-3 p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg transition-colors"
+                                                className="flex items-center gap-3 p-3 bg-neutral-800 hover:bg-neutral-700 rounded transition-colors"
                                             >
                                                 <div className="relative">
-                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center text-white font-semibold text-sm">
+                                                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black font-semibold text-sm">
                                                         {user.info.name.charAt(0).toUpperCase()}
                                                     </div>
-                                                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                                                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white border-2 border-neutral-900 rounded-full"></div>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-medium text-white truncate">{user.info.name}</p>
                                                     {user.info.email !== 'guest' && (
-                                                        <p className="text-xs text-slate-400 truncate">{user.info.email}</p>
+                                                        <p className="text-xs text-neutral-400 truncate">{user.info.email}</p>
                                                     )}
                                                 </div>
                                             </motion.div>
