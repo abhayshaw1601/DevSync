@@ -14,6 +14,7 @@ import {
     Download,
     Save
 } from "lucide-react";
+import { pusherClient } from "@/lib/pusher";
 
 type Tool = "pencil" | "line" | "circle" | "rectangle" | "polygon" | "curve" | "eraser";
 
@@ -43,6 +44,9 @@ export default function Canvas({ roomId }: CanvasProps) {
     const [isDrawing, setIsDrawing] = useState(false);
     const [currentElement, setCurrentElement] = useState<DrawElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Ref to track if update came from Pusher (to prevent save loop)
+    const isRemoteUpdate = useRef(false);
 
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -234,7 +238,7 @@ export default function Canvas({ roomId }: CanvasProps) {
 
     // Save to API
     const handleSave = useCallback(async () => {
-        if (!roomId) return;
+        if (!roomId || isRemoteUpdate.current) return;
         setIsSaving(true);
         try {
             await fetch("/api/room/save", {
@@ -268,9 +272,32 @@ export default function Canvas({ roomId }: CanvasProps) {
         fetchElements();
     }, [roomId]);
 
-    // Auto-save
+    // Pusher subscription for real-time canvas updates
     useEffect(() => {
-        if (!roomId || elements.length === 0) return;
+        if (!roomId) return;
+
+        const channel = pusherClient.subscribe(`room-${roomId}`);
+
+        channel.bind('canvas-update', (data: { elements: DrawElement[] }) => {
+            // Mark as remote update to prevent triggering save
+            isRemoteUpdate.current = true;
+            if (data.elements) {
+                setElements(data.elements);
+            }
+            // Reset after a short delay
+            setTimeout(() => {
+                isRemoteUpdate.current = false;
+            }, 100);
+        });
+
+        return () => {
+            pusherClient.unsubscribe(`room-${roomId}`);
+        };
+    }, [roomId]);
+
+    // Auto-save - only save if it's not a remote update
+    useEffect(() => {
+        if (!roomId || elements.length === 0 || isRemoteUpdate.current) return;
         const timeout = setTimeout(() => {
             handleSave();
         }, 2000);

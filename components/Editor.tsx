@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Editor as MonacoEditor } from "@monaco-editor/react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import LangSelect from "./langselect";
 import ExecuteCode from "./executecode";
+import { pusherClient } from "@/lib/pusher";
 
 interface EditorProps {
     roomId?: string;
@@ -15,6 +16,9 @@ export default function Editor({ roomId }: EditorProps) {
     const [code, setCode] = useState<string | undefined>("// Loading...");
     const [output, setOutput] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Ref to track if update came from Pusher (to prevent save loop)
+    const isRemoteUpdate = useRef(false);
 
     // Fetch initial code if roomId is present
     useEffect(() => {
@@ -41,6 +45,28 @@ export default function Editor({ roomId }: EditorProps) {
         fetchRoom();
     }, [roomId]);
 
+    // Pusher subscription for real-time updates
+    useEffect(() => {
+        if (!roomId) return;
+
+        const channel = pusherClient.subscribe(`room-${roomId}`);
+
+        channel.bind('code-update', (data: { code: string; language: string }) => {
+            // Mark as remote update to prevent triggering save
+            isRemoteUpdate.current = true;
+            if (data.code !== undefined) setCode(data.code);
+            if (data.language !== undefined) setLanguage(data.language);
+            // Reset after a short delay
+            setTimeout(() => {
+                isRemoteUpdate.current = false;
+            }, 100);
+        });
+
+        return () => {
+            pusherClient.unsubscribe(`room-${roomId}`);
+        };
+    }, [roomId]);
+
     // Auto-save logic
     const saveCode = useCallback(async (newCode: string, newLang: string) => {
         if (!roomId) return;
@@ -58,12 +84,12 @@ export default function Editor({ roomId }: EditorProps) {
         }
     }, [roomId]);
 
-    // Debounce save
+    // Debounce save - only save if it's not a remote update
     useEffect(() => {
+        if (!code || !roomId || isRemoteUpdate.current) return;
+
         const timeoutId = setTimeout(() => {
-            if (code && roomId) {
-                saveCode(code, language);
-            }
+            saveCode(code, language);
         }, 1000);
 
         return () => clearTimeout(timeoutId);

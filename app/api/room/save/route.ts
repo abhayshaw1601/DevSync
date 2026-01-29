@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import { Room } from '@/models/Room';
+import { pusherServer } from '@/lib/pusher';
 
 export async function POST(req: Request) {
     try {
@@ -23,6 +24,20 @@ export async function POST(req: Request) {
             { $set: updateFields },
             { upsert: true, new: true }
         );
+
+        // Trigger Pusher events based on what was updated
+        if (code !== undefined || language !== undefined) {
+            await pusherServer.trigger(`room-${roomId}`, 'code-update', {
+                code,
+                language
+            });
+        }
+
+        if (elements !== undefined) {
+            await pusherServer.trigger(`room-${roomId}`, 'canvas-update', {
+                elements
+            });
+        }
 
         return NextResponse.json({ success: true, room });
     } catch (error: any) {
