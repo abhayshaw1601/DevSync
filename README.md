@@ -1,3 +1,4 @@
+
 # DevSync
 
 A real-time collaboration platform for developers featuring a powerful Monaco code editor and infinite canvas whiteboard. Built with Next.js 14, TypeScript, and Pusher for seamless team collaboration.
