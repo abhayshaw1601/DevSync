@@ -99,17 +99,37 @@ export default function Canvas({ roomId }: CanvasProps) {
 
     const handleMouseUp = useCallback(() => {
         if (currentElement && currentElement.points.length > 0) {
-            setElements(prev => [...prev, currentElement]);
+            const newElements = [...elements, currentElement];
+            setElements(newElements);
+            
+            // Immediately broadcast the new element for real-time sync
+            if (roomId && !isRemoteUpdate.current) {
+                fetch("/api/room/save", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ roomId, elements: newElements }),
+                }).catch(console.error);
+            }
         }
         setCurrentElement(null);
         setIsDrawing(false);
-    }, [currentElement]);
+    }, [currentElement, elements, roomId]);
 
     const handleElementClick = useCallback((id: string) => {
         if (tool === "eraser") {
-            setElements(prev => prev.filter(el => el.id !== id));
+            const newElements = elements.filter(el => el.id !== id);
+            setElements(newElements);
+            
+            // Immediately broadcast the deletion for real-time sync
+            if (roomId && !isRemoteUpdate.current) {
+                fetch("/api/room/save", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ roomId, elements: newElements }),
+                }).catch(console.error);
+            }
         }
-    }, [tool]);
+    }, [tool, elements, roomId]);
 
     const renderElement = useCallback((el: DrawElement) => {
         const { points, color, width, tool: elTool, id } = el;
@@ -159,7 +179,17 @@ export default function Canvas({ roomId }: CanvasProps) {
         }
     }, [tool, handleElementClick]);
 
-    const handleClear = () => setElements([]);
+    const handleClear = () => {
+        setElements([]);
+        // Immediately broadcast the clear for real-time sync
+        if (roomId && !isRemoteUpdate.current) {
+            fetch("/api/room/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ roomId, elements: [] }),
+            }).catch(console.error);
+        }
+    };
     const handleExport = () => {
         const svg = svgRef.current;
         if (!svg) return;
@@ -190,17 +220,20 @@ export default function Canvas({ roomId }: CanvasProps) {
         const channel = pusherClient.subscribe(`room-${roomId}`);
         channel.bind('canvas-update', (data: { elements: DrawElement[] }) => {
             isRemoteUpdate.current = true;
-            if (data.elements) setElements(data.elements);
-            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+            if (data.elements) {
+                setElements(data.elements);
+            }
+            setTimeout(() => { isRemoteUpdate.current = false; }, 200);
         });
         return () => { pusherClient.unsubscribe(`room-${roomId}`); };
     }, [roomId]);
 
-    useEffect(() => {
-        if (!roomId || elements.length === 0 || isRemoteUpdate.current) return;
-        const t = setTimeout(handleSave, 2000);
-        return () => clearTimeout(t);
-    }, [elements, roomId, handleSave]);
+    // Remove the auto-save effect since we're now saving immediately on each action
+    // useEffect(() => {
+    //     if (!roomId || elements.length === 0 || isRemoteUpdate.current) return;
+    //     const t = setTimeout(handleSave, 2000);
+    //     return () => clearTimeout(t);
+    // }, [elements, roomId, handleSave]);
 
     return (
         <div className="h-full w-full flex flex-col bg-slate-900 relative">

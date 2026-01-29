@@ -30,18 +30,24 @@ export default function Editor({ roomId, files, activeFileId, onFileContentChang
     useEffect(() => {
         if (!roomId) return;
         const channel = pusherClient.subscribe(`room-${roomId}`);
+        
         channel.bind('file-update', (data: { fileId: string; content: string }) => {
             if (data.fileId === activeFileId) {
-                // only update if it's the current file to prevent jitter, assuming context switches handle full data
                 isRemoteUpdate.current = true;
+                onFileContentChange(data.fileId, data.content);
+                setTimeout(() => { isRemoteUpdate.current = false; }, 100);
             }
         });
+        
         return () => { pusherClient.unsubscribe(`room-${roomId}`); };
-    }, [roomId, activeFileId]);
+    }, [roomId, activeFileId, onFileContentChange]);
 
-    // Simple auto-save for editor
+    // Real-time sync for editor changes
     useEffect(() => {
-        if (!activeFile || !roomId || isRemoteUpdate.current) return;
+        if (!activeFile || !roomId || isRemoteUpdate.current) {
+            isRemoteUpdate.current = false;
+            return;
+        }
         if (activeFile.content === '') return;
 
         const timeoutId = setTimeout(async () => {
@@ -50,15 +56,19 @@ export default function Editor({ roomId, files, activeFileId, onFileContentChang
                 await fetch("/api/room/save", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId, files }), // Sync full state
+                    body: JSON.stringify({ 
+                        roomId, 
+                        fileId: activeFile.id,
+                        content: activeFile.content
+                    }),
                 });
             } finally { setIsSaving(false); }
-        }, 1500);
+        }, 500); // Reduced from 1500ms to 500ms for faster sync
         return () => clearTimeout(timeoutId);
-    }, [activeFile?.content, roomId, files]);
+    }, [activeFile?.content, roomId, activeFile?.id]);
 
     const handleEditorChange = (value: string | undefined) => {
-        if (activeFile && value !== undefined) {
+        if (activeFile && value !== undefined && !isRemoteUpdate.current) {
             onFileContentChange(activeFile.id, value);
         }
     };
