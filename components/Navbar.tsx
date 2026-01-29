@@ -76,18 +76,18 @@ export default function Navbar() {
                         <Loader2 className="w-5 h-5 text-neutral-500 animate-spin" />
                     ) : user ? (
                         <div className="flex items-center gap-4">
-                            <span className="text-sm text-neutral-300 hidden md:block">
+                            <span className="text-sm font-semibold text-white bg-white/10 px-3 py-1.5 rounded-lg border border-white/20 hidden md:block">
                                 Hi, {user.name.split(' ')[0]}
                             </span>
                             <button
                                 onClick={handleLogout}
-                                className="text-sm font-medium text-neutral-400 hover:text-white transition-colors"
+                                className="text-sm font-medium bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all"
                             >
                                 Logout
                             </button>
                             <Link
                                 href={`/Room/${roomId}`}
-                                className="bg-white hover:bg-neutral-100 text-black text-sm font-medium px-4 py-2 rounded transition-all"
+                                className="bg-white hover:bg-neutral-100 text-black text-sm font-medium px-4 py-2 rounded-lg transition-all"
                             >
                                 New Room
                             </Link>
