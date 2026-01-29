@@ -1,5 +1,5 @@
 import Editor from "@/components/Editor";
-import Whiteboard from "@/components/Whiteboard";
+
 
 export default function Home() {
   return (
@@ -25,7 +25,7 @@ export default function Home() {
 
         {/* Right Pane: Whiteboard */}
         <div className="w-1/2 bg-white">
-          <Whiteboard />
+
         </div>
       </div>
     </main>

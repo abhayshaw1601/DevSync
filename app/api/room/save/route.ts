@@ -6,22 +6,21 @@ export async function POST(req: Request) {
     try {
         const mongoose = await dbConnect();
         console.log(`Connected to DB: ${mongoose.connection.name} on host: ${mongoose.connection.host}`);
-        const { roomId, code, language } = await req.json();
-
+        const { roomId, code, language, elements } = await req.json();
 
         if (!roomId) {
             return NextResponse.json({ error: "roomId is required" }, { status: 400 });
         }
 
+        // Build update object dynamically based on what was provided
+        const updateFields: any = { updatedAt: new Date() };
+        if (code !== undefined) updateFields.code = code;
+        if (language !== undefined) updateFields.language = language;
+        if (elements !== undefined) updateFields.elements = elements;
+
         const room = await Room.findOneAndUpdate(
             { roomId },
-            {
-                $set: {
-                    code,
-                    language,
-                    updatedAt: new Date()
-                }
-            },
+            { $set: updateFields },
             { upsert: true, new: true }
         );
 

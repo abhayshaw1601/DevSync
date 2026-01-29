@@ -82,9 +82,9 @@ export default function Editor({ roomId }: EditorProps) {
                     {roomId && <span className="text-xs text-zinc-500 bg-zinc-900/50 px-2 py-1 rounded backdrop-blur-sm transition-opacity">{isSaving ? "Saving..." : "Saved"}</span>}
                 </div>
 
-                <PanelGroup direction="vertical" className="h-full">
+                <PanelGroup direction="vertical" className="h-full" id="editor-panel-group">
                     {/* Top Panel: Code Editor */}
-                    <Panel defaultSize={75} minSize={20}>
+                    <Panel defaultSize={75} minSize={20} id="editor-panel">
                         <MonacoEditor
                             height="100%"
                             language={language}
@@ -107,7 +107,7 @@ export default function Editor({ roomId }: EditorProps) {
                     </PanelResizeHandle>
 
                     {/* Bottom Panel: Terminal/Output */}
-                    <Panel defaultSize={25} minSize={10} className="bg-zinc-900 border-t border-zinc-800 flex flex-col">
+                    <Panel defaultSize={25} minSize={10} id="terminal-panel" className="bg-zinc-900 border-t border-zinc-800 flex flex-col">
                         <div className="px-4 py-2 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
                             <h3 className="text-sm font-semibold text-zinc-400 select-none">Terminal Output</h3>
                             <ExecuteCode
