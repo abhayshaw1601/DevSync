@@ -99,37 +99,44 @@ export default function Canvas({ roomId }: CanvasProps) {
 
     const handleMouseUp = useCallback(() => {
         if (currentElement && currentElement.points.length > 0) {
-            const newElements = [...elements, currentElement];
-            setElements(newElements);
-            
-            // Immediately broadcast the new element for real-time sync
-            if (roomId && !isRemoteUpdate.current) {
-                fetch("/api/room/save", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId, elements: newElements }),
-                }).catch(console.error);
-            }
+            setElements(prev => {
+                const newElements = [...prev, currentElement];
+                
+                // Immediately broadcast the new element for real-time sync
+                if (roomId && !isRemoteUpdate.current) {
+                    fetch("/api/room/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ roomId, elements: newElements }),
+                    }).catch(console.error);
+                }
+                
+                return newElements;
+            });
         }
         setCurrentElement(null);
         setIsDrawing(false);
-    }, [currentElement, elements, roomId]);
+    }, [currentElement, roomId]);
 
-    const handleElementClick = useCallback((id: string) => {
+    const handleElementClick = useCallback((id: string, e: React.MouseEvent) => {
         if (tool === "eraser") {
-            const newElements = elements.filter(el => el.id !== id);
-            setElements(newElements);
-            
-            // Immediately broadcast the deletion for real-time sync
-            if (roomId && !isRemoteUpdate.current) {
-                fetch("/api/room/save", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId, elements: newElements }),
-                }).catch(console.error);
-            }
+            e.stopPropagation();
+            setElements(prev => {
+                const newElements = prev.filter(el => el.id !== id);
+                
+                // Immediately broadcast the deletion for real-time sync
+                if (roomId && !isRemoteUpdate.current) {
+                    fetch("/api/room/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ roomId, elements: newElements }),
+                    }).catch(console.error);
+                }
+                
+                return newElements;
+            });
         }
-    }, [tool, elements, roomId]);
+    }, [tool, roomId]);
 
     const renderElement = useCallback((el: DrawElement) => {
         const { points, color, width, tool: elTool, id } = el;
@@ -141,7 +148,7 @@ export default function Canvas({ roomId }: CanvasProps) {
             fill: "none",
             strokeLinecap: "round" as const,
             strokeLinejoin: "round" as const,
-            onClick: () => handleElementClick(id),
+            onClick: (e: React.MouseEvent) => handleElementClick(id, e),
             style: { cursor: tool === "eraser" ? "pointer" : "default" },
         };
 

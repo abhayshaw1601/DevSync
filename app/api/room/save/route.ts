@@ -41,32 +41,34 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "roomId is required" }, { status: 400 });
         }
 
-        // Build update object dynamically
+        // Handle single file content update with atomic operation (highest priority)
+        if (fileId !== undefined && content !== undefined) {
+            // Use MongoDB's positional operator for atomic update
+            // This prevents race conditions by updating in a single operation
+            const result = await Room.updateOne(
+                { roomId, 'files.id': fileId },
+                { $set: { 'files.$.content': content, updatedAt: new Date() } }
+            );
+            
+            if (result.matchedCount === 0) {
+                console.log(`File ${fileId} not found in room ${roomId}, skipping content update`);
+            } else {
+                console.log(`Successfully updated file ${fileId} content atomically`);
+                // Trigger Pusher event for real-time sync
+                await pusherServer.trigger(`room-${roomId}`, 'file-update', { fileId, content });
+            }
+            
+            // Get updated room for response
+            const room = await Room.findOne({ roomId });
+            return NextResponse.json({ success: true, room });
+        }
+
+        // Build update object for other operations
         const updateFields: any = { updatedAt: new Date() };
 
         // Handle full files array update (create/delete/rename)
         if (files !== undefined) {
             updateFields.files = files;
-        }
-
-        // Handle single file content update
-        if (fileId !== undefined && content !== undefined) {
-            // Update specific file content using atomic operation
-            // Only update if the file exists, don't overwrite if race condition
-            const room = await Room.findOne({ roomId });
-            if (room && room.files) {
-                const fileExists = room.files.some((f: FileSystemItem) => f.id === fileId);
-                if (fileExists) {
-                    const updatedFiles = room.files.map((f: FileSystemItem) =>
-                        f.id === fileId ? { ...f, content } : f
-                    );
-                    updateFields.files = updatedFiles;
-                } else {
-                    // File doesn't exist yet (race condition), skip this update
-                    // The files-sync will handle it properly
-                    console.log(`Skipping content update for non-existent file: ${fileId}`);
-                }
-            }
         }
 
         // Handle canvas elements
@@ -83,10 +85,6 @@ export async function POST(req: Request) {
         // Trigger Pusher events based on what was updated
         if (files !== undefined) {
             await pusherServer.trigger(`room-${roomId}`, 'files-sync', { files });
-        }
-
-        if (fileId !== undefined && content !== undefined) {
-            await pusherServer.trigger(`room-${roomId}`, 'file-update', { fileId, content });
         }
 
         if (elements !== undefined) {
