@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
 export default function Navbar() {
     const [user, setUser] = useState<{ name: string; email: string } | null>(null);
     const [loading, setLoading] = useState(true);
-    const [scrolled, setScrolled] = useState(false);
-    const pathname = usePathname();
 
     useEffect(() => {
         fetch('/api/auth/me')
@@ -20,13 +17,6 @@ export default function Navbar() {
                 setLoading(false);
             })
             .catch(() => setLoading(false));
-
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 20);
-        };
-
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
     const [roomId, setRoomId] = useState<string>("");
@@ -41,36 +31,30 @@ export default function Navbar() {
         window.location.href = '/';
     };
 
-    // Allow customized nav rendering or hide on specific routes if needed
-    // For now, it shows everywhere this component is included.
-
     return (
         <motion.nav
-            initial={{ y: -100 }}
-            animate={{ y: 0 }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
-            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/80 backdrop-blur-md border-b border-white/10 py-3" : "bg-transparent py-5"
-                }`}
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl"
         >
-            <div className="container mx-auto px-6 flex items-center justify-between">
+            <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl px-6 py-3 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-2 group">
-                    <div className="w-8 h-8 rounded bg-white flex items-center justify-center text-black font-bold text-lg transition-transform group-hover:scale-105">
+                    <div className="w-8 h-8 rounded bg-white flex items-center justify-center text-black font-bold text-sm transition-transform group-hover:scale-105">
                         D
                     </div>
-                    <span className="text-xl font-bold text-white tracking-tight">
+                    <span className="text-lg font-bold text-white tracking-tight">
                         DevSync
                     </span>
                 </Link>
 
                 <div className="flex items-center gap-6">
-                    <Link href="/demo" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
-                        Demo
+                    <Link href="/" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
+                        Home
                     </Link>
                     <Link href="/about" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
                         About
                     </Link>
-
-                    <div className="w-px h-5 bg-neutral-800" />
 
                     {loading ? (
                         <Loader2 className="w-5 h-5 text-neutral-500 animate-spin" />
@@ -102,7 +86,7 @@ export default function Navbar() {
                             </Link>
                             <Link
                                 href="/signup"
-                                className="bg-white text-black text-sm font-medium px-4 py-2 rounded hover:bg-neutral-100 transition-colors"
+                                className="bg-white text-black text-sm font-medium px-4 py-2 rounded-lg hover:bg-neutral-200 transition-all"
                             >
                                 Sign Up
                             </Link>

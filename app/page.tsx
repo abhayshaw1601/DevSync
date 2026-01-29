@@ -114,8 +114,8 @@ export default function LandingPage() {
           </Link>
 
           <div className="flex items-center gap-6">
-            <Link href="/demo" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
-              Demo
+            <Link href="/" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
+              Home
             </Link>
             <Link href="/about" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors">
               About
@@ -130,7 +130,7 @@ export default function LandingPage() {
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-sm font-medium bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all"
+                  className="text-sm font-medium bg-white hover:bg-red-600 text-black hover:text-white px-4 py-2 rounded-lg transition-all"
                 >
                   Logout
                 </button>
