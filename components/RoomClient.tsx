@@ -2,28 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Copy, Check, PenTool, Code2, Maximize2, Minimize2 } from "lucide-react";
+import { Copy, Check, PenTool, Code2, Maximize2, Minimize2, ArrowLeft, Share2, PanelLeftClose, PanelLeft } from "lucide-react";
 import FileExplorer, { FileSystemItem } from "./FileExplorer";
 import { pusherClient } from "@/lib/pusher";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Dynamic import to prevent hydration mismatch from react-resizable-panels
+// Dynamic imports
 const Editor = dynamic(() => import("@/components/Editor"), {
     ssr: false,
-    loading: () => (
-        <div className="h-full w-full bg-zinc-900 flex items-center justify-center text-zinc-500">
-            Loading editor...
-        </div>
-    )
+    loading: () => <div className="h-full w-full bg-slate-950" />
 });
 
-// Dynamic import for Canvas
 const Canvas = dynamic(() => import("@/components/Canvas"), {
     ssr: false,
-    loading: () => (
-        <div className="h-full w-full bg-slate-800 flex items-center justify-center text-slate-400">
-            Loading canvas...
-        </div>
-    )
+    loading: () => <div className="h-full w-full bg-slate-900" />
 });
 
 interface RoomClientProps {
@@ -34,16 +27,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const [showWhiteboard, setShowWhiteboard] = useState(false);
     const [expandedCanvas, setExpandedCanvas] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [showSidebar, setShowSidebar] = useState(true);
 
-    // Multi-file state
     const [files, setFiles] = useState<FileSystemItem[]>([
-        { id: 'default', name: 'index.js', type: 'file', content: '// Welcome to DevSync\n// Start coding...' }
+        { id: 'default', name: 'loading...', type: 'file', content: '' }
     ]);
     const [activeFileId, setActiveFileId] = useState('default');
-
     const isRemoteUpdate = useRef(false);
 
-    // Fetch initial files from API
     useEffect(() => {
         const fetchRoom = async () => {
             try {
@@ -52,6 +43,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 if (data.room?.files && data.room.files.length > 0) {
                     setFiles(data.room.files);
                     setActiveFileId(data.room.files[0].id);
+                } else {
+                    setFiles([{ id: 'default', name: 'index.js', type: 'file', content: '// Welcome to DevSync Room\n// Start collaborating!' }]);
+                    setActiveFileId('default');
                 }
             } catch (error) {
                 console.error("Failed to fetch room:", error);
@@ -60,284 +54,163 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         fetchRoom();
     }, [roomId]);
 
-    // Pusher subscription for file sync
     useEffect(() => {
         const channel = pusherClient.subscribe(`room-${roomId}`);
-
         channel.bind('files-sync', (data: { files: FileSystemItem[] }) => {
-            console.log('[PUSHER] Received files-sync:', data.files);
             isRemoteUpdate.current = true;
-            if (data.files) {
-                setFiles(data.files);
-            }
+            if (data.files) setFiles(data.files);
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         });
-
         channel.bind('file-update', (data: { fileId: string; content: string }) => {
             isRemoteUpdate.current = true;
-            setFiles(prev => prev.map(f =>
-                f.id === data.fileId ? { ...f, content: data.content } : f
-            ));
+            setFiles(prev => prev.map(f => f.id === data.fileId ? { ...f, content: data.content } : f));
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         });
-
-        return () => {
-            pusherClient.unsubscribe(`room-${roomId}`);
-        };
+        return () => { pusherClient.unsubscribe(`room-${roomId}`); };
     }, [roomId]);
 
-    // Handle file content change
     const handleFileContentChange = useCallback((fileId: string, content: string) => {
-        setFiles(prev => prev.map(f =>
-            f.id === fileId ? { ...f, content } : f
-        ));
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, content } : f));
     }, []);
 
-    // Create new file
-    const handleFileCreate = async (fileName: string, parentId?: string) => {
-        const newFile: FileSystemItem = {
-            id: Date.now().toString(),
-            name: fileName,
-            type: 'file',
-            content: '',
-            parentId,
-        };
-        let updatedFiles = [...files, newFile];
-
-        // Update parent folder's children array
-        if (parentId) {
-            updatedFiles = updatedFiles.map(f =>
-                f.id === parentId && f.type === 'folder'
-                    ? { ...f, children: [...(f.children || []), newFile.id] }
-                    : f
-            );
-        }
-
+    const syncFiles = async (updatedFiles: FileSystemItem[]) => {
         setFiles(updatedFiles);
+        await fetch("/api/room/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId, files: updatedFiles }),
+        });
+    }
+
+    const handleFileCreate = (name: string, parentId?: string) => {
+        const newFile: FileSystemItem = { id: Date.now().toString(), name, type: 'file', content: '', parentId };
+        let updated = [...files, newFile];
+        if (parentId) updated = updated.map(f => f.id === parentId && f.type === 'folder' ? { ...f, children: [...(f.children || []), newFile.id] } : f);
+        syncFiles(updated);
         setActiveFileId(newFile.id);
-
-        await fetch("/api/room/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roomId, files: updatedFiles }),
-        });
     };
 
-    // Create new folder
-    const handleFolderCreate = async (folderName: string, parentId?: string) => {
-        const newFolder: FileSystemItem = {
-            id: Date.now().toString(),
-            name: folderName,
-            type: 'folder',
-            children: [],
-            parentId,
-        };
-        let updatedFiles = [...files, newFolder];
-
-        // Update parent folder's children array
-        if (parentId) {
-            updatedFiles = updatedFiles.map(f =>
-                f.id === parentId && f.type === 'folder'
-                    ? { ...f, children: [...(f.children || []), newFolder.id] }
-                    : f
-            );
-        }
-
-        setFiles(updatedFiles);
-
-        await fetch("/api/room/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roomId, files: updatedFiles }),
-        });
+    const handleFolderCreate = (name: string, parentId?: string) => {
+        const newFolder: FileSystemItem = { id: Date.now().toString(), name, type: 'folder', children: [], parentId };
+        let updated = [...files, newFolder];
+        if (parentId) updated = updated.map(f => f.id === parentId && f.type === 'folder' ? { ...f, children: [...(f.children || []), newFolder.id] } : f);
+        syncFiles(updated);
     };
 
-    // Delete file or folder (cascade delete for folders)
-    const handleFileDelete = async (fileId: string) => {
-        // Get all IDs to delete (including nested children for folders)
-        const getIdsToDelete = (id: string): string[] => {
-            const item = files.find(f => f.id === id);
-            if (!item) return [id];
-            if (item.type === 'folder' && item.children) {
-                return [id, ...item.children.flatMap(childId => getIdsToDelete(childId))];
-            }
-            return [id];
+    const handleFileDelete = (id: string) => {
+        const getIds = (itemId: string): string[] => {
+            const item = files.find(f => f.id === itemId);
+            if (!item) return [itemId];
+            if (item.type === 'folder' && item.children) return [itemId, ...item.children.flatMap(getIds)];
+            return [itemId];
         };
+        const idsToDelete = new Set(getIds(id));
+        const item = files.find(f => f.id === id);
+        let updated = files.filter(f => !idsToDelete.has(f.id));
+        if (item?.parentId) updated = updated.map(f => f.id === item.parentId && f.type === 'folder' ? { ...f, children: (f.children || []).filter(c => c !== id) } : f);
 
-        const idsToDelete = new Set(getIdsToDelete(fileId));
-        const item = files.find(f => f.id === fileId);
-
-        let updatedFiles = files.filter(f => !idsToDelete.has(f.id));
-
-        // Remove from parent's children array
-        if (item?.parentId) {
-            updatedFiles = updatedFiles.map(f =>
-                f.id === item.parentId && f.type === 'folder'
-                    ? { ...f, children: (f.children || []).filter(c => c !== fileId) }
-                    : f
-            );
-        }
-
-        setFiles(updatedFiles);
         if (idsToDelete.has(activeFileId)) {
-            const firstFile = updatedFiles.find(f => f.type === 'file');
-            if (firstFile) setActiveFileId(firstFile.id);
+            const first = updated.find(f => f.type === 'file');
+            if (first) setActiveFileId(first.id);
         }
-
-        await fetch("/api/room/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roomId, files: updatedFiles }),
-        });
+        syncFiles(updated);
     };
 
-    // Rename file
-    const handleFileRename = async (fileId: string, newName: string) => {
-        const updatedFiles = files.map(f =>
-            f.id === fileId ? { ...f, name: newName } : f
-        );
-        setFiles(updatedFiles);
-
-        await fetch("/api/room/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roomId, files: updatedFiles }),
-        });
+    const handleFileRename = (id: string, name: string) => {
+        syncFiles(files.map(f => f.id === id ? { ...f, name } : f));
     };
 
     const handleShareLink = async () => {
         const url = window.location.href;
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            const textarea = document.createElement("textarea");
-            textarea.value = url;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand("copy");
-            document.body.removeChild(textarea);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }
-    };
-
-    const toggleWhiteboard = () => {
-        if (showWhiteboard) {
-            setExpandedCanvas(false);
-        }
-        setShowWhiteboard(!showWhiteboard);
-    };
-
-    const toggleExpand = () => {
-        setExpandedCanvas(!expandedCanvas);
-    };
-
-    // Calculate pane classes based on state
-    const getEditorClasses = () => {
-        const base = "h-full transition-all duration-500 ease-in-out flex";
-        if (!showWhiteboard) return `${base} w-full opacity-100`;
-        if (expandedCanvas) return `${base} w-0 opacity-0 scale-95 overflow-hidden`;
-        return `${base} w-1/2 border-r border-slate-700 opacity-100`;
-    };
-
-    const getCanvasClasses = () => {
-        const base = "h-full transition-all duration-500 ease-in-out";
-        if (expandedCanvas) return `${base} w-full`;
-        return `${base} w-1/2`;
+        try { await navigator.clipboard.writeText(url); } catch (e) { /* fallback */ }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     return (
-        <main className="flex flex-col h-screen w-full bg-slate-900 overflow-hidden">
+        <main className="flex flex-col h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans">
             {/* Header */}
-            <nav className="h-14 border-b border-slate-700 flex items-center px-6 justify-between bg-slate-800">
-                <h1 className="text-xl font-bold text-white tracking-tight">
-                    Dev<span className="text-blue-400">Sync</span>
-                    <span className="ml-4 text-xs font-normal text-zinc-400 border border-zinc-600 px-2 py-0.5 rounded-full">
-                        Room: {roomId}
-                    </span>
-                </h1>
-                <div className="flex gap-3">
-                    {/* Toggle Whiteboard Button */}
+            <nav className="h-14 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-900/50 backdrop-blur-md z-10">
+                <div className="flex items-center gap-4">
+                    <Link href="/" className="text-slate-400 hover:text-white transition-colors">
+                        <ArrowLeft size={20} />
+                    </Link>
+                    <div className="h-6 w-px bg-slate-800" />
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white tracking-tight">Room</span>
+                        <span className="text-xs font-mono text-slate-500 bg-slate-800 px-2 py-0.5 rounded">{roomId}</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={toggleWhiteboard}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${showWhiteboard
-                            ? "bg-blue-600 hover:bg-blue-500 text-white"
-                            : "bg-zinc-700 hover:bg-zinc-600 text-white"
-                            }`}
+                        onClick={() => setShowSidebar(!showSidebar)}
+                        className={`p-2 rounded-md transition-colors ${!showSidebar ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-white'}`}
+                        title="Toggle Sidebar"
                     >
-                        {showWhiteboard ? (
-                            <>
-                                <Code2 size={16} />
-                                Hide Canvas
-                            </>
-                        ) : (
-                            <>
-                                <PenTool size={16} />
-                                Show Canvas
-                            </>
-                        )}
+                        {showSidebar ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
                     </button>
 
-                    {/* Expand/Collapse Canvas Button */}
+                    <div className="h-4 w-px bg-slate-800" />
+
+                    <button
+                        onClick={() => { setShowWhiteboard(!showWhiteboard); if (showWhiteboard) setExpandedCanvas(false); }}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${showWhiteboard
+                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            }`}
+                    >
+                        {showWhiteboard ? <Code2 size={16} /> : <PenTool size={16} />}
+                        {showWhiteboard ? "Code View" : "Canvas"}
+                    </button>
+
                     {showWhiteboard && (
                         <button
-                            onClick={toggleExpand}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${expandedCanvas
-                                ? "bg-purple-600 hover:bg-purple-500 text-white"
-                                : "bg-zinc-700 hover:bg-zinc-600 text-white"
-                                }`}
-                            title={expandedCanvas ? "Collapse Canvas" : "Expand Canvas"}
+                            onClick={() => setExpandedCanvas(!expandedCanvas)}
+                            className="p-2 text-slate-400 hover:text-white transition-colors"
+                            title={expandedCanvas ? "Minimize" : "Maximize"}
                         >
-                            {expandedCanvas ? (
-                                <>
-                                    <Minimize2 size={16} />
-                                    Collapse
-                                </>
-                            ) : (
-                                <>
-                                    <Maximize2 size={16} />
-                                    Expand
-                                </>
-                            )}
+                            {expandedCanvas ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                         </button>
                     )}
 
-                    {/* Share Link Button */}
                     <button
                         onClick={handleShareLink}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-md text-sm font-medium text-white transition"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600/10 text-green-400 border border-green-600/20 hover:bg-green-600/20 transition-all"
                     >
-                        {copied ? (
-                            <>
-                                <Check size={16} />
-                                Copied!
-                            </>
-                        ) : (
-                            <>
-                                <Copy size={16} />
-                                Share Link
-                            </>
-                        )}
+                        {copied ? <Check size={16} /> : <Share2 size={16} />}
+                        {copied ? "Copied" : "Share"}
                     </button>
                 </div>
             </nav>
 
-            {/* Main Workspace */}
-            <div className="flex flex-1 overflow-hidden relative">
-                {/* Editor Pane with File Explorer */}
-                <div className={getEditorClasses()}>
-                    <FileExplorer
-                        files={files}
-                        activeFileId={activeFileId}
-                        onFileSelect={setActiveFileId}
-                        onFileCreate={handleFileCreate}
-                        onFolderCreate={handleFolderCreate}
-                        onFileDelete={handleFileDelete}
-                        onFileRename={handleFileRename}
-                    />
-                    <div className="flex-1 h-full">
+            {/* Workspace */}
+            <div className="flex-1 flex overflow-hidden relative">
+                {/* Sidebar + Editor */}
+                <div className={`flex flex-1 transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)] ${showWhiteboard && expandedCanvas ? 'w-0 opacity-0 overflow-hidden' : 'w-full'} ${showWhiteboard && !expandedCanvas ? 'w-1/2' : ''}`}>
+                    <AnimatePresence initial={false}>
+                        {showSidebar && (
+                            <motion.div
+                                initial={{ width: 0, opacity: 0 }}
+                                animate={{ width: 250, opacity: 1 }}
+                                exit={{ width: 0, opacity: 0 }}
+                                transition={{ duration: 0.3, ease: "easeInOut" }}
+                                className="border-r border-slate-800 bg-slate-900 overflow-hidden flex-shrink-0"
+                            >
+                                <FileExplorer
+                                    files={files}
+                                    activeFileId={activeFileId}
+                                    onFileSelect={setActiveFileId}
+                                    onFileCreate={handleFileCreate}
+                                    onFolderCreate={handleFolderCreate}
+                                    onFileDelete={handleFileDelete}
+                                    onFileRename={handleFileRename}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <div className="flex-1 bg-slate-950 relative">
                         <Editor
                             roomId={roomId}
                             files={files}
@@ -347,12 +220,20 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     </div>
                 </div>
 
-                {/* Canvas Pane */}
-                {showWhiteboard && (
-                    <div className={getCanvasClasses()}>
-                        <Canvas roomId={roomId} />
-                    </div>
-                )}
+                {/* Canvas Panel */}
+                <AnimatePresence>
+                    {showWhiteboard && (
+                        <motion.div
+                            initial={{ x: "100%", opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: "100%", opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            className={`absolute right-0 top-0 bottom-0 bg-slate-900 z-20 border-l border-slate-800 ${expandedCanvas ? 'w-full' : 'w-1/2 shadow-2xl'}`}
+                        >
+                            <Canvas roomId={roomId} />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </main>
     );

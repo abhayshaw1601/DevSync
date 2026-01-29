@@ -12,9 +12,12 @@ import {
     Grid3X3,
     Trash2,
     Download,
-    Save
+    Save,
+    Undo2,
+    Palette
 } from "lucide-react";
 import { pusherClient } from "@/lib/pusher";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Tool = "pencil" | "line" | "circle" | "rectangle" | "polygon" | "curve" | "eraser";
 
@@ -37,7 +40,7 @@ interface CanvasProps {
 
 export default function Canvas({ roomId }: CanvasProps) {
     const [tool, setTool] = useState<Tool>("pencil");
-    const [color, setColor] = useState("#01070fff");
+    const [color, setColor] = useState("#3b82f6");
     const [strokeWidth, setStrokeWidth] = useState(3);
     const [showGrid, setShowGrid] = useState(false);
     const [elements, setElements] = useState<DrawElement[]>([]);
@@ -45,24 +48,21 @@ export default function Canvas({ roomId }: CanvasProps) {
     const [currentElement, setCurrentElement] = useState<DrawElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Ref to track if update came from Pusher (to prevent save loop)
+    // Ref to track if update came from Pusher
     const isRemoteUpdate = useRef(false);
-
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Tool definitions
     const tools: { id: Tool; icon: React.ReactNode; label: string }[] = [
         { id: "pencil", icon: <Pencil size={18} />, label: "Pencil" },
         { id: "line", icon: <Minus size={18} />, label: "Line" },
+        { id: "curve", icon: <Spline size={18} />, label: "Curve" },
         { id: "circle", icon: <Circle size={18} />, label: "Circle" },
         { id: "rectangle", icon: <Square size={18} />, label: "Rectangle" },
         { id: "polygon", icon: <Pentagon size={18} />, label: "Polygon" },
-        { id: "curve", icon: <Spline size={18} />, label: "Curve" },
         { id: "eraser", icon: <Eraser size={18} />, label: "Eraser" },
     ];
 
-    // Get mouse position relative to SVG
     const getMousePos = useCallback((e: React.MouseEvent): Point => {
         const svg = svgRef.current;
         if (!svg) return { x: 0, y: 0 };
@@ -73,10 +73,8 @@ export default function Canvas({ roomId }: CanvasProps) {
         };
     }, []);
 
-    // Start drawing
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         if (tool === "eraser") return;
-
         const pos = getMousePos(e);
         const newElement: DrawElement = {
             id: Date.now().toString(),
@@ -89,27 +87,16 @@ export default function Canvas({ roomId }: CanvasProps) {
         setIsDrawing(true);
     }, [tool, color, strokeWidth, getMousePos]);
 
-    // Continue drawing
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         if (!isDrawing || !currentElement) return;
-
         const pos = getMousePos(e);
-
         if (tool === "pencil" || tool === "curve") {
-            setCurrentElement({
-                ...currentElement,
-                points: [...currentElement.points, pos],
-            });
+            setCurrentElement({ ...currentElement, points: [...currentElement.points, pos] });
         } else {
-            // For shapes, only keep start and current point
-            setCurrentElement({
-                ...currentElement,
-                points: [currentElement.points[0], pos],
-            });
+            setCurrentElement({ ...currentElement, points: [currentElement.points[0], pos] });
         }
     }, [isDrawing, currentElement, tool, getMousePos]);
 
-    // End drawing
     const handleMouseUp = useCallback(() => {
         if (currentElement && currentElement.points.length > 0) {
             setElements(prev => [...prev, currentElement]);
@@ -118,14 +105,12 @@ export default function Canvas({ roomId }: CanvasProps) {
         setIsDrawing(false);
     }, [currentElement]);
 
-    // Handle eraser click
     const handleElementClick = useCallback((id: string) => {
         if (tool === "eraser") {
             setElements(prev => prev.filter(el => el.id !== id));
         }
     }, [tool]);
 
-    // Render element path
     const renderElement = useCallback((el: DrawElement) => {
         const { points, color, width, tool: elTool, id } = el;
         if (points.length === 0) return null;
@@ -144,91 +129,42 @@ export default function Canvas({ roomId }: CanvasProps) {
             case "pencil":
             case "curve":
                 if (points.length < 2) return null;
-                const pathData = points.reduce((acc, point, i) => {
-                    return acc + (i === 0 ? `M ${point.x} ${point.y}` : ` L ${point.x} ${point.y}`);
-                }, "");
+                const pathData = points.reduce((acc, point, i) => i === 0 ? `M ${point.x} ${point.y}` : `${acc} L ${point.x} ${point.y}`, "");
                 return <path key={id} d={pathData} {...commonProps} />;
-
             case "line":
                 if (points.length < 2) return null;
-                return (
-                    <line
-                        key={id}
-                        x1={points[0].x}
-                        y1={points[0].y}
-                        x2={points[1].x}
-                        y2={points[1].y}
-                        {...commonProps}
-                    />
-                );
-
+                return <line key={id} x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} {...commonProps} />;
             case "circle":
                 if (points.length < 2) return null;
-                const dx = points[1].x - points[0].x;
-                const dy = points[1].y - points[0].y;
-                const radius = Math.sqrt(dx * dx + dy * dy);
-                return (
-                    <circle
-                        key={id}
-                        cx={points[0].x}
-                        cy={points[0].y}
-                        r={radius}
-                        {...commonProps}
-                    />
-                );
-
+                const r = Math.sqrt(Math.pow(points[1].x - points[0].x, 2) + Math.pow(points[1].y - points[0].y, 2));
+                return <circle key={id} cx={points[0].x} cy={points[0].y} r={r} {...commonProps} />;
             case "rectangle":
                 if (points.length < 2) return null;
                 const x = Math.min(points[0].x, points[1].x);
                 const y = Math.min(points[0].y, points[1].y);
-                const rectWidth = Math.abs(points[1].x - points[0].x);
-                const rectHeight = Math.abs(points[1].y - points[0].y);
-                return (
-                    <rect
-                        key={id}
-                        x={x}
-                        y={y}
-                        width={rectWidth}
-                        height={rectHeight}
-                        {...commonProps}
-                    />
-                );
-
+                const w = Math.abs(points[1].x - points[0].x);
+                const h = Math.abs(points[1].y - points[0].y);
+                return <rect key={id} x={x} y={y} width={w} height={h} {...commonProps} />;
             case "polygon":
-                // Draw as a hexagon
                 if (points.length < 2) return null;
-                const centerX = points[0].x;
-                const centerY = points[0].y;
-                const r = Math.sqrt(
-                    Math.pow(points[1].x - centerX, 2) + Math.pow(points[1].y - centerY, 2)
-                );
+                const cx = points[0].x, cy = points[0].y;
+                const pr = Math.sqrt(Math.pow(points[1].x - cx, 2) + Math.pow(points[1].y - cy, 2));
                 const sides = 6;
                 const polyPoints = Array.from({ length: sides }, (_, i) => {
                     const angle = (i * 2 * Math.PI) / sides - Math.PI / 2;
-                    return `${centerX + r * Math.cos(angle)},${centerY + r * Math.sin(angle)}`;
+                    return `${cx + pr * Math.cos(angle)},${cy + pr * Math.sin(angle)}`;
                 }).join(" ");
                 return <polygon key={id} points={polyPoints} {...commonProps} />;
-
-            default:
-                return null;
+            default: return null;
         }
     }, [tool, handleElementClick]);
 
-    // Clear canvas
-    const handleClear = () => {
-        setElements([]);
-    };
-
-    // Export as SVG
+    const handleClear = () => setElements([]);
     const handleExport = () => {
         const svg = svgRef.current;
         if (!svg) return;
-
-        const serializer = new XMLSerializer();
-        const svgString = serializer.serializeToString(svg);
-        const blob = new Blob([svgString], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(blob);
-
+        const svgString = new XMLSerializer().serializeToString(svg);
+        const url = URL.createObjectURL(new Blob([svgString], { type: "image/svg+xml" }));
         const a = document.createElement("a");
         a.href = url;
         a.download = `canvas-${Date.now()}.svg`;
@@ -236,87 +172,50 @@ export default function Canvas({ roomId }: CanvasProps) {
         URL.revokeObjectURL(url);
     };
 
-    // Save to API
     const handleSave = useCallback(async () => {
         if (!roomId || isRemoteUpdate.current) return;
         setIsSaving(true);
         try {
-            await fetch("/api/room/save", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ roomId, elements }),
-            });
-        } catch (error) {
-            console.error("Failed to save canvas:", error);
-        } finally {
-            setIsSaving(false);
-        }
+            await fetch("/api/room/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, elements }) });
+        } catch (e) { console.error(e); } finally { setIsSaving(false); }
     }, [roomId, elements]);
 
-    // Load from API
     useEffect(() => {
         if (!roomId) return;
-        const fetchElements = async () => {
-            try {
-                const res = await fetch(`/api/room/save?roomId=${roomId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.room?.elements) {
-                        setElements(data.room.elements);
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to load canvas:", error);
-            }
-        };
-        fetchElements();
+        fetch(`/api/room/save?roomId=${roomId}`).then(r => r.ok && r.json()).then(d => { if (d.room?.elements) setElements(d.room.elements); });
     }, [roomId]);
 
-    // Pusher subscription for real-time canvas updates
     useEffect(() => {
         if (!roomId) return;
-
         const channel = pusherClient.subscribe(`room-${roomId}`);
-
         channel.bind('canvas-update', (data: { elements: DrawElement[] }) => {
-            // Mark as remote update to prevent triggering save
             isRemoteUpdate.current = true;
-            if (data.elements) {
-                setElements(data.elements);
-            }
-            // Reset after a short delay
-            setTimeout(() => {
-                isRemoteUpdate.current = false;
-            }, 100);
+            if (data.elements) setElements(data.elements);
+            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         });
-
-        return () => {
-            pusherClient.unsubscribe(`room-${roomId}`);
-        };
+        return () => { pusherClient.unsubscribe(`room-${roomId}`); };
     }, [roomId]);
 
-    // Auto-save - only save if it's not a remote update
     useEffect(() => {
         if (!roomId || elements.length === 0 || isRemoteUpdate.current) return;
-        const timeout = setTimeout(() => {
-            handleSave();
-        }, 2000);
-        return () => clearTimeout(timeout);
+        const t = setTimeout(handleSave, 2000);
+        return () => clearTimeout(t);
     }, [elements, roomId, handleSave]);
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-900">
-            {/* Toolbar */}
-            <div className="flex items-center gap-2 p-3 bg-slate-800 border-b border-slate-700 flex-wrap">
-                {/* Drawing Tools */}
+        <div className="h-full w-full flex flex-col bg-slate-900 relative">
+            {/* Floating Toolbar */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-4 p-2 pl-4 rounded-full bg-slate-800/80 backdrop-blur-md border border-slate-700 shadow-xl z-20">
+
+                {/* Tools Group */}
                 <div className="flex gap-1">
                     {tools.map((t) => (
                         <button
                             key={t.id}
                             onClick={() => setTool(t.id)}
-                            className={`p-2 rounded-md transition-colors ${tool === t.id
-                                ? "bg-blue-600 text-white"
-                                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                            className={`p-2.5 rounded-full transition-all duration-200 ${tool === t.id
+                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40 transform scale-105"
+                                : "text-slate-400 hover:text-white hover:bg-slate-700/50"
                                 }`}
                             title={t.label}
                         >
@@ -325,100 +224,80 @@ export default function Canvas({ roomId }: CanvasProps) {
                     ))}
                 </div>
 
-                <div className="w-px h-6 bg-slate-600 mx-2" />
+                <div className="w-px h-6 bg-slate-700" />
 
-                {/* Grid Toggle */}
-                <button
-                    onClick={() => setShowGrid(!showGrid)}
-                    className={`p-2 rounded-md transition-colors ${showGrid
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                        }`}
-                    title="Toggle Grid"
-                >
-                    <Grid3X3 size={18} />
-                </button>
-
-                <div className="w-px h-6 bg-slate-600 mx-2" />
-
-                {/* Color Picker */}
-                <div className="flex items-center gap-2">
-                    <label className="text-slate-400 text-sm">Color:</label>
-                    <input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        className="w-8 h-8 rounded cursor-pointer border-0"
-                    />
-                </div>
-
-                {/* Stroke Width */}
-                <div className="flex items-center gap-2">
-                    <label className="text-slate-400 text-sm">Width:</label>
-                    <input
-                        type="range"
-                        min="1"
-                        max="20"
-                        value={strokeWidth}
-                        onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                        className="w-24"
-                    />
-                    <span className="text-slate-400 text-sm w-6">{strokeWidth}</span>
-                </div>
-
-                <div className="flex-1" />
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                    {isSaving && (
-                        <span className="text-blue-400 text-sm self-center">Saving...</span>
-                    )}
+                {/* Settings Group */}
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={handleClear}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-md text-sm transition-colors"
+                        onClick={() => setShowGrid(!showGrid)}
+                        className={`p-2.5 rounded-full transition-all ${showGrid ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+                        title="Toggle Grid"
                     >
-                        <Trash2 size={16} />
-                        Clear
+                        <Grid3X3 size={18} />
                     </button>
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-md text-sm transition-colors"
-                    >
-                        <Download size={16} />
-                        Export SVG
+
+                    <div className="relative group">
+                        <div
+                            className="w-6 h-6 rounded-full border border-slate-600 cursor-pointer shadow-inner"
+                            style={{ backgroundColor: color }}
+                        />
+                        <input
+                            type="color"
+                            value={color}
+                            onChange={(e) => setColor(e.target.value)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                    </div>
+
+                    <div className="w-20">
+                        <input
+                            type="range"
+                            min="1"
+                            max="20"
+                            value={strokeWidth}
+                            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                            className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                    </div>
+                </div>
+
+                <div className="w-px h-6 bg-slate-700" />
+
+                {/* Actions */}
+                <div className="flex gap-2 pr-2">
+                    <button onClick={handleClear} className="p-2.5 text-red-400 hover:bg-slate-700/50 rounded-full transition-colors" title="Clear Canvas">
+                        <Trash2 size={18} />
+                    </button>
+                    <button onClick={handleExport} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-full transition-colors" title="Export SVG">
+                        <Download size={18} />
                     </button>
                     {roomId && (
-                        <button
-                            onClick={handleSave}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm transition-colors"
-                        >
-                            <Save size={16} />
-                            Save
-                        </button>
+                        <div className={`text-xs font-medium px-3 py-1.5 rounded-full ${isSaving ? 'bg-yellow-500/20 text-yellow-500' : 'bg-green-500/20 text-green-500'}`}>
+                            {isSaving ? "Saving..." : "Saved"}
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* Canvas Container */}
             <div
                 ref={containerRef}
-                className="flex-1 overflow-auto bg-white"
-                style={{ cursor: tool === "eraser" ? "crosshair" : "crosshair" }}
+                className="flex-1 overflow-hidden cursor-crosshair bg-[#0f172a]"
             >
                 <svg
                     ref={svgRef}
-                    width="2000"
-                    height="2000"
+                    width="100%"
+                    height="100%"
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
-                    style={{ background: showGrid ? "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"%3E%3Crect width=\"40\" height=\"40\" fill=\"white\"/%3E%3Cpath d=\"M 40 0 L 0 0 0 40\" fill=\"none\" stroke=\"%23e5e7eb\" stroke-width=\"1\"/%3E%3C/svg%3E')" : "white" }}
+                    style={{
+                        background: showGrid
+                            ? "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"%3E%3Crect width=\"20\" height=\"20\" fill=\"%230f172a\"/%3E%3Ccircle cx=\"1\" cy=\"1\" r=\"1\" fill=\"%231e293b\"/%3E%3C/svg%3E')"
+                            : "#0f172a"
+                    }}
                 >
-                    {/* Render all elements */}
                     {elements.map(renderElement)}
-
-                    {/* Render current element being drawn */}
                     {currentElement && renderElement(currentElement)}
                 </svg>
             </div>

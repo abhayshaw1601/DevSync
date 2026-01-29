@@ -1,67 +1,115 @@
 "use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { usePathname } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 export default function Navbar() {
+    const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [scrolled, setScrolled] = useState(false);
+    const pathname = usePathname();
+
+    useEffect(() => {
+        fetch('/api/auth/me')
+            .then(res => res.json())
+            .then(data => {
+                if (data.user) setUser(data.user);
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+        };
+
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    const [roomId, setRoomId] = useState<string>("");
+
+    useEffect(() => {
+        setRoomId(Date.now().toString());
+    }, []);
+
+    const handleLogout = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        setUser(null);
+        window.location.href = '/';
+    };
+
+    // Allow customized nav rendering or hide on specific routes if needed
+    // For now, it shows everywhere this component is included.
+
     return (
-        <header className="border-b border-zinc-800 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
-                    {/* Logo */}
-                    <Link href="/" className="flex items-center gap-2 group">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center transform group-hover:scale-105 transition-transform duration-200">
-                            <span className="text-white font-bold text-lg select-none">D</span>
-                        </div>
-                        <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent select-none">
-                            DevSync
-                        </span>
+        <motion.nav
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-slate-950/80 backdrop-blur-md border-b border-slate-800 py-3" : "bg-transparent py-5"
+                }`}
+        >
+            <div className="container mx-auto px-6 flex items-center justify-between">
+                <Link href="/" className="flex items-center gap-2 group">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-blue-500/25 transition-shadow">
+                        D
+                    </div>
+                    <span className="text-xl font-bold text-white tracking-tight">
+                        Dev<span className="text-blue-400">Sync</span>
+                    </span>
+                </Link>
+
+                <div className="flex items-center gap-6">
+                    <Link href="/demo" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                        Demo
+                    </Link>
+                    <Link href="/about" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                        About
                     </Link>
 
-                    {/* Navigation & Actions */}
-                    <nav className="flex items-center gap-1 sm:gap-6">
-                        <div className="hidden sm:flex items-center gap-6">
-                            <Link
-                                href="/"
-                                className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                    <div className="w-px h-5 bg-slate-800" />
+
+                    {loading ? (
+                        <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+                    ) : user ? (
+                        <div className="flex items-center gap-4">
+                            <span className="text-sm text-slate-300 hidden md:block">
+                                Hi, {user.name.split(' ')[0]}
+                            </span>
+                            <button
+                                onClick={handleLogout}
+                                className="text-sm font-medium text-red-400 hover:text-red-300 transition-colors"
                             >
-                                Home
-                            </Link>
+                                Logout
+                            </button>
                             <Link
-                                href="/About"
-                                className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                                href={`/Room/${roomId}`}
+                                className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg shadow-blue-900/20 hover:shadow-blue-600/30 transition-all transform hover:-translate-y-0.5"
                             >
-                                About
+                                New Room
                             </Link>
                         </div>
-
-                        <div className="h-5 w-px bg-zinc-800 hidden sm:block"></div>
-
-                        <div className="flex items-center gap-3">
-                            <button
-                                className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-zinc-900/50 hover:bg-zinc-800 rounded-md border border-zinc-800 transition-all cursor-pointer"
-                                onClick={() => {
-                                    const roomId = prompt("Enter Room ID");
-                                    if (roomId) {
-                                        window.location.href = `/Room/${roomId}`;
-                                    }
-                                }}
+                    ) : (
+                        <div className="flex items-center gap-4">
+                            <Link
+                                href="/login"
+                                className="text-sm font-medium text-white hover:text-blue-400 transition-colors"
                             >
-                                Join Room
-                            </button>
-                            <button
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all cursor-pointer"
-                                onClick={() => {
-                                    const roomId = Math.random().toString(36).substring(2, 10);
-                                    if (roomId) {
-                                        window.location.href = `/Room/${roomId}`;
-                                    }
-                                }}
+                                Login
+                            </Link>
+                            <Link
+                                href="/signup"
+                                className="bg-white text-slate-900 text-sm font-medium px-4 py-2 rounded-full hover:bg-blue-50 transition-colors shadow-lg shadow-white/10"
                             >
-                                Create Room
-                            </button>
+                                Sign Up
+                            </Link>
                         </div>
-                    </nav>
+                    )}
                 </div>
             </div>
-        </header>
+        </motion.nav>
     );
 }
