@@ -4,15 +4,23 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { ArrowRight, Code2, Users, Radio, Zap, Shield } from "lucide-react";
+import { ArrowRight, Code2, Users, Radio, Zap, Shield, LogIn } from "lucide-react";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 
 export default function LandingPage() {
   const [roomId, setRoomId] = useState<string>("");
+  const [joinRoomId, setJoinRoomId] = useState<string>("");
+  const [showJoinModal, setShowJoinModal] = useState<boolean>(false);
 
   useEffect(() => {
     setRoomId(Date.now().toString());
   }, []);
+
+  const handleJoinRoom = () => {
+    if (joinRoomId.trim()) {
+      window.location.href = `/Room/${joinRoomId.trim()}`;
+    }
+  };
 
   const container = {
     hidden: { opacity: 0 },
@@ -81,6 +89,13 @@ export default function LandingPage() {
                 Start Coding Now
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="w-full sm:w-auto px-8 py-4 bg-slate-800/50 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 rounded-xl font-semibold transition-all backdrop-blur-sm hover:scale-105 flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-5 h-5" />
+                Join Room
+              </button>
               <Link
                 href="/demo"
                 className="w-full sm:w-auto px-8 py-4 bg-slate-800/50 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 rounded-xl font-semibold transition-all backdrop-blur-sm hover:scale-105 flex items-center justify-center gap-2"
@@ -162,6 +177,49 @@ export default function LandingPage() {
           <p>© 2024 DevSync. Built for developers.</p>
         </div>
       </footer>
+
+      {/* Join Room Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl"
+          >
+            <h2 className="text-2xl font-bold mb-2 text-white">Join a Room</h2>
+            <p className="text-slate-400 mb-6">Enter the room ID to join an existing collaboration session</p>
+            
+            <input
+              type="text"
+              value={joinRoomId}
+              onChange={(e) => setJoinRoomId(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+              placeholder="Enter Room ID"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-6"
+              autoFocus
+            />
+            
+            <div className="flex gap-3">
+              <button
+                onClick={handleJoinRoom}
+                disabled={!joinRoomId.trim()}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-blue-500"
+              >
+                Join Room
+              </button>
+              <button
+                onClick={() => {
+                  setShowJoinModal(false);
+                  setJoinRoomId("");
+                }}
+                className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg font-semibold transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
