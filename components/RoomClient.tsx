@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Copy, Check, PenTool, Code2, Maximize2, Minimize2, ArrowLeft, Share2, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Copy, Check, PenTool, Code2, Maximize2, Minimize2, ArrowLeft, Share2, PanelLeftClose, PanelLeft, Users } from "lucide-react";
 import FileExplorer, { FileSystemItem } from "./FileExplorer";
 import { pusherClient } from "@/lib/pusher";
 import Link from "next/link";
@@ -23,11 +23,21 @@ interface RoomClientProps {
     roomId: string;
 }
 
+interface PresenceMember {
+    id: string;
+    info: {
+        name: string;
+        email: string;
+    };
+}
+
 export default function RoomClient({ roomId }: RoomClientProps) {
     const [showWhiteboard, setShowWhiteboard] = useState(false);
     const [expandedCanvas, setExpandedCanvas] = useState(false);
     const [copied, setCopied] = useState(false);
     const [showSidebar, setShowSidebar] = useState(true);
+    const [showUsers, setShowUsers] = useState(false);
+    const [connectedUsers, setConnectedUsers] = useState<PresenceMember[]>([]);
 
     const [files, setFiles] = useState<FileSystemItem[]>([
         { id: 'default', name: 'loading...', type: 'file', content: '' }
@@ -66,7 +76,30 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             setFiles(prev => prev.map(f => f.id === data.fileId ? { ...f, content: data.content } : f));
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         });
-        return () => { pusherClient.unsubscribe(`room-${roomId}`); };
+
+        // Subscribe to presence channel for user tracking
+        const presenceChannel = pusherClient.subscribe(`presence-room-${roomId}`) as any;
+        
+        presenceChannel.bind('pusher:subscription_succeeded', (members: any) => {
+            const users: PresenceMember[] = [];
+            members.each((member: any) => {
+                users.push({ id: member.id, info: member.info });
+            });
+            setConnectedUsers(users);
+        });
+
+        presenceChannel.bind('pusher:member_added', (member: any) => {
+            setConnectedUsers(prev => [...prev, { id: member.id, info: member.info }]);
+        });
+
+        presenceChannel.bind('pusher:member_removed', (member: any) => {
+            setConnectedUsers(prev => prev.filter(u => u.id !== member.id));
+        });
+
+        return () => { 
+            pusherClient.unsubscribe(`room-${roomId}`);
+            pusherClient.unsubscribe(`presence-room-${roomId}`);
+        };
     }, [roomId]);
 
     const handleFileContentChange = useCallback((fileId: string, content: string) => {
@@ -143,6 +176,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowUsers(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600/10 text-indigo-400 border border-indigo-600/20 hover:bg-indigo-600/20 transition-all"
+                        title="View Connected Users"
+                    >
+                        <Users size={16} />
+                        <span>{connectedUsers.length}</span>
+                    </button>
+
+                    <div className="h-4 w-px bg-slate-800" />
+
                     <button
                         onClick={() => setShowSidebar(!showSidebar)}
                         className={`p-2 rounded-md transition-colors ${!showSidebar ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-white'}`}
@@ -235,6 +279,86 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* Connected Users Modal */}
+            <AnimatePresence>
+                {showUsers && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowUsers(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", duration: 0.3 }}
+                            className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="p-6 border-b border-slate-800">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                            <Users size={20} className="text-indigo-400" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-white">Connected Users</h2>
+                                            <p className="text-sm text-slate-400">{connectedUsers.length} {connectedUsers.length === 1 ? 'user' : 'users'} online</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowUsers(false)}
+                                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                            <path d="M15 5L5 15M5 5l10 10" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-4 overflow-y-auto max-h-[60vh]">
+                                {connectedUsers.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <div className="inline-flex p-4 bg-slate-800/50 rounded-full mb-4">
+                                            <Users size={32} className="text-slate-600" />
+                                        </div>
+                                        <p className="text-slate-400 text-sm">No users connected yet</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {connectedUsers.map((user, index) => (
+                                            <motion.div
+                                                key={user.id}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: index * 0.05 }}
+                                                className="flex items-center gap-3 p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg transition-colors"
+                                            >
+                                                <div className="relative">
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center text-white font-semibold text-sm">
+                                                        {user.info.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-white truncate">{user.info.name}</p>
+                                                    {user.info.email !== 'guest' && (
+                                                        <p className="text-xs text-slate-400 truncate">{user.info.email}</p>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </main>
     );
 }
