@@ -14,7 +14,8 @@ import {
     Download,
     Save,
     Undo2,
-    Palette
+    Palette,
+    Maximize
 } from "lucide-react";
 import { pusherClient } from "@/lib/pusher";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,6 +49,11 @@ export default function Canvas({ roomId }: CanvasProps) {
     const [currentElement, setCurrentElement] = useState<DrawElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Pan/zoom state
+    const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 3000, height: 3000 });
+    const [isPanning, setIsPanning] = useState(false);
+    const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
     // Ref to track if update came from Pusher
     const isRemoteUpdate = useRef(false);
     const svgRef = useRef<SVGSVGElement>(null);
@@ -66,14 +72,23 @@ export default function Canvas({ roomId }: CanvasProps) {
     const getMousePos = useCallback((e: React.MouseEvent): Point => {
         const svg = svgRef.current;
         if (!svg) return { x: 0, y: 0 };
-        const rect = svg.getBoundingClientRect();
+        const CTM = svg.getScreenCTM();
+        if (!CTM) return { x: 0, y: 0 };
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
+            x: (e.clientX - CTM.e) / CTM.a,
+            y: (e.clientY - CTM.f) / CTM.d,
         };
     }, []);
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        // Handle panning with middle mouse button or space + left click
+        if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+            setIsPanning(true);
+            setPanStart({ x: e.clientX, y: e.clientY });
+            e.preventDefault();
+            return;
+        }
+
         if (tool === "eraser") return;
         const pos = getMousePos(e);
         const newElement: DrawElement = {
@@ -88,6 +103,19 @@ export default function Canvas({ roomId }: CanvasProps) {
     }, [tool, color, strokeWidth, getMousePos]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        // Handle panning
+        if (isPanning) {
+            const dx = (e.clientX - panStart.x) * (viewBox.width / (containerRef.current?.clientWidth || 1));
+            const dy = (e.clientY - panStart.y) * (viewBox.height / (containerRef.current?.clientHeight || 1));
+            setViewBox(prev => ({
+                ...prev,
+                x: prev.x - dx,
+                y: prev.y - dy,
+            }));
+            setPanStart({ x: e.clientX, y: e.clientY });
+            return;
+        }
+
         if (!isDrawing || !currentElement) return;
         const pos = getMousePos(e);
         if (tool === "pencil" || tool === "curve") {
@@ -95,9 +123,15 @@ export default function Canvas({ roomId }: CanvasProps) {
         } else {
             setCurrentElement({ ...currentElement, points: [currentElement.points[0], pos] });
         }
-    }, [isDrawing, currentElement, tool, getMousePos]);
+    }, [isDrawing, currentElement, tool, getMousePos, isPanning, panStart, viewBox]);
 
     const handleMouseUp = useCallback(() => {
+        // Stop panning
+        if (isPanning) {
+            setIsPanning(false);
+            return;
+        }
+
         if (currentElement && currentElement.points.length > 0) {
             setElements(prev => {
                 const newElements = [...prev, currentElement];
@@ -116,7 +150,7 @@ export default function Canvas({ roomId }: CanvasProps) {
         }
         setCurrentElement(null);
         setIsDrawing(false);
-    }, [currentElement, roomId]);
+    }, [currentElement, roomId, isPanning]);
 
     const handleElementClick = useCallback((id: string, e: React.MouseEvent) => {
         if (tool === "eraser") {
@@ -197,6 +231,11 @@ export default function Canvas({ roomId }: CanvasProps) {
             }).catch(console.error);
         }
     };
+
+    const handleResetView = () => {
+        setViewBox({ x: 0, y: 0, width: 3000, height: 3000 });
+    };
+
     const handleExport = () => {
         const svg = svgRef.current;
         if (!svg) return;
@@ -305,6 +344,9 @@ export default function Canvas({ roomId }: CanvasProps) {
 
                 {/* Actions */}
                 <div className="flex gap-2 pr-2">
+                    <button onClick={handleResetView} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-full transition-colors" title="Reset View">
+                        <Maximize size={18} />
+                    </button>
                     <button onClick={handleClear} className="p-2.5 text-red-400 hover:bg-slate-700/50 rounded-full transition-colors" title="Clear Canvas">
                         <Trash2 size={18} />
                     </button>
@@ -321,12 +363,19 @@ export default function Canvas({ roomId }: CanvasProps) {
 
             <div
                 ref={containerRef}
-                className="flex-1 overflow-hidden cursor-crosshair bg-[#0f172a]"
+                className="flex-1 overflow-hidden bg-[#0f172a] relative"
+                style={{ cursor: isPanning ? 'grabbing' : (tool === 'eraser' ? 'pointer' : 'crosshair') }}
             >
+                {/* Helper text */}
+                <div className="absolute bottom-4 left-4 text-xs text-slate-500 bg-slate-800/50 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 z-10">
+                    <p>Hold <span className="text-slate-300 font-semibold">Shift</span> + drag to pan • Canvas: 3000x3000px</p>
+                </div>
+
                 <svg
                     ref={svgRef}
                     width="100%"
                     height="100%"
+                    viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}

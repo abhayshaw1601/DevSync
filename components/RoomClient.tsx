@@ -153,6 +153,36 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         syncFiles(files.map(f => f.id === id ? { ...f, name } : f));
     };
 
+    const handleFileMove = (fileId: string, newParentId?: string) => {
+        const item = files.find(f => f.id === fileId);
+        if (!item) return;
+
+        let updated = [...files];
+
+        // Remove from old parent's children
+        if (item.parentId) {
+            updated = updated.map(f => 
+                f.id === item.parentId && f.type === 'folder' 
+                    ? { ...f, children: (f.children || []).filter(c => c !== fileId) }
+                    : f
+            );
+        }
+
+        // Add to new parent's children
+        if (newParentId) {
+            updated = updated.map(f => 
+                f.id === newParentId && f.type === 'folder'
+                    ? { ...f, children: [...(f.children || []), fileId] }
+                    : f
+            );
+        }
+
+        // Update the item's parentId
+        updated = updated.map(f => f.id === fileId ? { ...f, parentId: newParentId } : f);
+
+        syncFiles(updated);
+    };
+
     const handleShareLink = async () => {
         const url = window.location.href;
         try { await navigator.clipboard.writeText(url); } catch (e) { /* fallback */ }
@@ -249,6 +279,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                                     onFolderCreate={handleFolderCreate}
                                     onFileDelete={handleFileDelete}
                                     onFileRename={handleFileRename}
+                                    onFileMove={handleFileMove}
                                 />
                             </motion.div>
                         )}

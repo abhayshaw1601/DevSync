@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { File, FilePlus, FolderPlus, Trash2, ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
+import { File, FilePlus, FolderPlus, Trash2, ChevronRight, ChevronDown, Folder, FolderOpen, Download, Move } from "lucide-react";
 
 // Extension to Monaco language mapping
 export const getLanguageFromExtension = (filename: string): string => {
@@ -54,6 +54,7 @@ interface FileExplorerProps {
     onFolderCreate: (folderName: string, parentId?: string) => void;
     onFileDelete: (fileId: string) => void;
     onFileRename: (fileId: string, newName: string) => void;
+    onFileMove?: (fileId: string, newParentId?: string) => void;
 }
 
 export default function FileExplorer({
@@ -64,12 +65,15 @@ export default function FileExplorer({
     onFolderCreate,
     onFileDelete,
     onFileRename,
+    onFileMove,
 }: FileExplorerProps) {
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
     const [isCreating, setIsCreating] = useState<{ type: 'file' | 'folder'; parentId?: string } | null>(null);
     const [newItemName, setNewItemName] = useState("");
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
+    const [movingItem, setMovingItem] = useState<FileSystemItem | null>(null);
+    const [showMoveModal, setShowMoveModal] = useState(false);
 
     // Get root items (items without parentId)
     const getRootItems = () => files.filter(f => !f.parentId);
@@ -122,6 +126,90 @@ export default function FileExplorer({
     const startRename = (item: FileSystemItem) => {
         setRenamingId(item.id);
         setRenameValue(item.name);
+    };
+
+    // Download file or folder
+    const handleDownload = (item: FileSystemItem) => {
+        if (item.type === 'file') {
+            // Download single file
+            const blob = new Blob([item.content || ''], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = item.name;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else {
+            // Download folder as zip (collect all files in folder)
+            const folderFiles = collectFolderFiles(item.id);
+            if (folderFiles.length === 0) {
+                alert('Folder is empty');
+                return;
+            }
+            
+            // Create a simple text representation of the folder structure
+            let content = `# Folder: ${item.name}\n\n`;
+            folderFiles.forEach(file => {
+                content += `## File: ${file.name}\n`;
+                content += `${file.content || ''}\n\n`;
+                content += '---\n\n';
+            });
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${item.name}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    // Collect all files in a folder recursively
+    const collectFolderFiles = (folderId: string): FileSystemItem[] => {
+        const children = getChildren(folderId);
+        let allFiles: FileSystemItem[] = [];
+        
+        children.forEach(child => {
+            if (child.type === 'file') {
+                allFiles.push(child);
+            } else if (child.type === 'folder') {
+                allFiles = [...allFiles, ...collectFolderFiles(child.id)];
+            }
+        });
+        
+        return allFiles;
+    };
+
+    // Start moving an item
+    const startMove = (item: FileSystemItem) => {
+        setMovingItem(item);
+        setShowMoveModal(true);
+    };
+
+    // Handle move to a new location
+    const handleMove = (newParentId?: string) => {
+        if (movingItem && onFileMove) {
+            // Prevent moving a folder into itself or its children
+            if (movingItem.type === 'folder' && newParentId) {
+                if (isDescendant(newParentId, movingItem.id)) {
+                    alert('Cannot move a folder into itself or its children');
+                    return;
+                }
+            }
+            onFileMove(movingItem.id, newParentId);
+            setMovingItem(null);
+            setShowMoveModal(false);
+        }
+    };
+
+    // Check if targetId is a descendant of folderId
+    const isDescendant = (targetId: string, folderId: string): boolean => {
+        const target = files.find(f => f.id === targetId);
+        if (!target) return false;
+        if (target.id === folderId) return true;
+        if (target.parentId) return isDescendant(target.parentId, folderId);
+        return false;
     };
 
     // Count total items for display
@@ -193,6 +281,30 @@ export default function FileExplorer({
 
                     {/* Action buttons */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {/* Download button */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownload(item);
+                            }}
+                            className="p-0.5 hover:bg-zinc-600 rounded text-zinc-500 hover:text-blue-400"
+                            title={isFolder ? "Download Folder" : "Download File"}
+                        >
+                            <Download size={12} />
+                        </button>
+                        {/* Move button */}
+                        {onFileMove && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    startMove(item);
+                                }}
+                                className="p-0.5 hover:bg-zinc-600 rounded text-zinc-500 hover:text-purple-400"
+                                title="Move"
+                            >
+                                <Move size={12} />
+                            </button>
+                        )}
                         {/* Add file/folder buttons for folders */}
                         {isFolder && (
                             <>
@@ -312,6 +424,73 @@ export default function FileExplorer({
                 {fileCount} file{fileCount !== 1 ? "s" : ""}
                 {folderCount > 0 && `, ${folderCount} folder${folderCount !== 1 ? "s" : ""}`}
             </div>
+
+            {/* Move Modal */}
+            {showMoveModal && movingItem && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-md w-full">
+                        <div className="p-4 border-b border-zinc-800">
+                            <h3 className="text-lg font-semibold text-white">Move {movingItem.name}</h3>
+                            <p className="text-sm text-zinc-400 mt-1">Select a destination folder or move to root</p>
+                        </div>
+                        
+                        <div className="p-4 max-h-64 overflow-y-auto">
+                            {/* Root option */}
+                            <button
+                                onClick={() => handleMove(undefined)}
+                                className="w-full text-left px-3 py-2 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors mb-2"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Folder size={16} className="text-yellow-500" />
+                                    <span className="text-sm font-medium">Root Directory</span>
+                                </div>
+                            </button>
+
+                            {/* Folder options */}
+                            {files.filter(f => f.type === 'folder' && f.id !== movingItem.id).map(folder => (
+                                <button
+                                    key={folder.id}
+                                    onClick={() => handleMove(folder.id)}
+                                    disabled={movingItem.type === 'folder' && isDescendant(folder.id, movingItem.id)}
+                                    className={`w-full text-left px-3 py-2 rounded transition-colors mb-1 ${
+                                        movingItem.type === 'folder' && isDescendant(folder.id, movingItem.id)
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : 'hover:bg-zinc-800 text-zinc-300 hover:text-white'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Folder size={16} className="text-yellow-500" />
+                                        <span className="text-sm">{folder.name}</span>
+                                        {folder.parentId && (
+                                            <span className="text-xs text-zinc-500 ml-auto">
+                                                in {files.find(f => f.id === folder.parentId)?.name}
+                                            </span>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+
+                            {files.filter(f => f.type === 'folder').length === 0 && (
+                                <div className="text-center py-8 text-zinc-500 text-sm">
+                                    No folders available. Item will be moved to root.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    setMovingItem(null);
+                                    setShowMoveModal(false);
+                                }}
+                                className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
