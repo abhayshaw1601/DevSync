@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { Copy, Check, PenTool, Code2, Maximize2, Minimize2 } from "lucide-react";
+import FileExplorer, { FileSystemItem } from "./FileExplorer";
+import { pusherClient } from "@/lib/pusher";
 
 // Dynamic import to prevent hydration mismatch from react-resizable-panels
 const Editor = dynamic(() => import("@/components/Editor"), {
@@ -33,6 +35,176 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     const [expandedCanvas, setExpandedCanvas] = useState(false);
     const [copied, setCopied] = useState(false);
 
+    // Multi-file state
+    const [files, setFiles] = useState<FileSystemItem[]>([
+        { id: 'default', name: 'index.js', type: 'file', content: '// Welcome to DevSync\n// Start coding...' }
+    ]);
+    const [activeFileId, setActiveFileId] = useState('default');
+
+    const isRemoteUpdate = useRef(false);
+
+    // Fetch initial files from API
+    useEffect(() => {
+        const fetchRoom = async () => {
+            try {
+                const res = await fetch(`/api/room/save?roomId=${roomId}`);
+                const data = await res.json();
+                if (data.room?.files && data.room.files.length > 0) {
+                    setFiles(data.room.files);
+                    setActiveFileId(data.room.files[0].id);
+                }
+            } catch (error) {
+                console.error("Failed to fetch room:", error);
+            }
+        };
+        fetchRoom();
+    }, [roomId]);
+
+    // Pusher subscription for file sync
+    useEffect(() => {
+        const channel = pusherClient.subscribe(`room-${roomId}`);
+
+        channel.bind('files-sync', (data: { files: FileSystemItem[] }) => {
+            console.log('[PUSHER] Received files-sync:', data.files);
+            isRemoteUpdate.current = true;
+            if (data.files) {
+                setFiles(data.files);
+            }
+            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+        });
+
+        channel.bind('file-update', (data: { fileId: string; content: string }) => {
+            isRemoteUpdate.current = true;
+            setFiles(prev => prev.map(f =>
+                f.id === data.fileId ? { ...f, content: data.content } : f
+            ));
+            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+        });
+
+        return () => {
+            pusherClient.unsubscribe(`room-${roomId}`);
+        };
+    }, [roomId]);
+
+    // Handle file content change
+    const handleFileContentChange = useCallback((fileId: string, content: string) => {
+        setFiles(prev => prev.map(f =>
+            f.id === fileId ? { ...f, content } : f
+        ));
+    }, []);
+
+    // Create new file
+    const handleFileCreate = async (fileName: string, parentId?: string) => {
+        const newFile: FileSystemItem = {
+            id: Date.now().toString(),
+            name: fileName,
+            type: 'file',
+            content: '',
+            parentId,
+        };
+        let updatedFiles = [...files, newFile];
+
+        // Update parent folder's children array
+        if (parentId) {
+            updatedFiles = updatedFiles.map(f =>
+                f.id === parentId && f.type === 'folder'
+                    ? { ...f, children: [...(f.children || []), newFile.id] }
+                    : f
+            );
+        }
+
+        setFiles(updatedFiles);
+        setActiveFileId(newFile.id);
+
+        await fetch("/api/room/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId, files: updatedFiles }),
+        });
+    };
+
+    // Create new folder
+    const handleFolderCreate = async (folderName: string, parentId?: string) => {
+        const newFolder: FileSystemItem = {
+            id: Date.now().toString(),
+            name: folderName,
+            type: 'folder',
+            children: [],
+            parentId,
+        };
+        let updatedFiles = [...files, newFolder];
+
+        // Update parent folder's children array
+        if (parentId) {
+            updatedFiles = updatedFiles.map(f =>
+                f.id === parentId && f.type === 'folder'
+                    ? { ...f, children: [...(f.children || []), newFolder.id] }
+                    : f
+            );
+        }
+
+        setFiles(updatedFiles);
+
+        await fetch("/api/room/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId, files: updatedFiles }),
+        });
+    };
+
+    // Delete file or folder (cascade delete for folders)
+    const handleFileDelete = async (fileId: string) => {
+        // Get all IDs to delete (including nested children for folders)
+        const getIdsToDelete = (id: string): string[] => {
+            const item = files.find(f => f.id === id);
+            if (!item) return [id];
+            if (item.type === 'folder' && item.children) {
+                return [id, ...item.children.flatMap(childId => getIdsToDelete(childId))];
+            }
+            return [id];
+        };
+
+        const idsToDelete = new Set(getIdsToDelete(fileId));
+        const item = files.find(f => f.id === fileId);
+
+        let updatedFiles = files.filter(f => !idsToDelete.has(f.id));
+
+        // Remove from parent's children array
+        if (item?.parentId) {
+            updatedFiles = updatedFiles.map(f =>
+                f.id === item.parentId && f.type === 'folder'
+                    ? { ...f, children: (f.children || []).filter(c => c !== fileId) }
+                    : f
+            );
+        }
+
+        setFiles(updatedFiles);
+        if (idsToDelete.has(activeFileId)) {
+            const firstFile = updatedFiles.find(f => f.type === 'file');
+            if (firstFile) setActiveFileId(firstFile.id);
+        }
+
+        await fetch("/api/room/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId, files: updatedFiles }),
+        });
+    };
+
+    // Rename file
+    const handleFileRename = async (fileId: string, newName: string) => {
+        const updatedFiles = files.map(f =>
+            f.id === fileId ? { ...f, name: newName } : f
+        );
+        setFiles(updatedFiles);
+
+        await fetch("/api/room/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId, files: updatedFiles }),
+        });
+    };
+
     const handleShareLink = async () => {
         const url = window.location.href;
         try {
@@ -40,7 +212,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
-            // Fallback for older browsers
             const textarea = document.createElement("textarea");
             textarea.value = url;
             document.body.appendChild(textarea);
@@ -54,7 +225,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
     const toggleWhiteboard = () => {
         if (showWhiteboard) {
-            // Closing whiteboard - also reset expanded state
             setExpandedCanvas(false);
         }
         setShowWhiteboard(!showWhiteboard);
@@ -66,7 +236,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
     // Calculate pane classes based on state
     const getEditorClasses = () => {
-        const base = "h-full transition-all duration-500 ease-in-out";
+        const base = "h-full transition-all duration-500 ease-in-out flex";
         if (!showWhiteboard) return `${base} w-full opacity-100`;
         if (expandedCanvas) return `${base} w-0 opacity-0 scale-95 overflow-hidden`;
         return `${base} w-1/2 border-r border-slate-700 opacity-100`;
@@ -110,7 +280,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
                         )}
                     </button>
 
-                    {/* Expand/Collapse Canvas Button - Only show when canvas is visible */}
+                    {/* Expand/Collapse Canvas Button */}
                     {showWhiteboard && (
                         <button
                             onClick={toggleExpand}
@@ -156,9 +326,25 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
             {/* Main Workspace */}
             <div className="flex flex-1 overflow-hidden relative">
-                {/* Editor Pane */}
+                {/* Editor Pane with File Explorer */}
                 <div className={getEditorClasses()}>
-                    <Editor roomId={roomId} />
+                    <FileExplorer
+                        files={files}
+                        activeFileId={activeFileId}
+                        onFileSelect={setActiveFileId}
+                        onFileCreate={handleFileCreate}
+                        onFolderCreate={handleFolderCreate}
+                        onFileDelete={handleFileDelete}
+                        onFileRename={handleFileRename}
+                    />
+                    <div className="flex-1 h-full">
+                        <Editor
+                            roomId={roomId}
+                            files={files}
+                            activeFileId={activeFileId}
+                            onFileContentChange={handleFileContentChange}
+                        />
+                    </div>
                 </div>
 
                 {/* Canvas Pane */}

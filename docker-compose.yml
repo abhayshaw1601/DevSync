@@ -20,7 +20,7 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/devsync
+      - MONGODB_URL=mongodb://mongodb:27017/devsync
     depends_on:
       - mongodb
 
